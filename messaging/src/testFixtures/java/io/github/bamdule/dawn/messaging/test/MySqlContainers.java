@@ -12,7 +12,9 @@ import org.testcontainers.utility.DockerImageName;
 @TestConfiguration(proxyBeanMethods = false)
 public class MySqlContainers {
 
-    private static final MySQLContainer MY_SQL_CONTAINER = new MySQLContainer(DockerImageName.parse("mysql:8.4"));
+    // 운영 compose 와 같은 시간대. 정산 대사처럼 날짜로 비교하는 쿼리가 대행사 날짜와 어긋나지 않게 한다
+    private static final MySQLContainer MY_SQL_CONTAINER = new MySQLContainer(DockerImageName.parse("mysql:8.4"))
+            .withEnv("TZ", "Asia/Seoul");
 
     static {
         MY_SQL_CONTAINER.start();

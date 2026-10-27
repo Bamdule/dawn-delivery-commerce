@@ -3,7 +3,7 @@ CREATE TABLE cutoff_run (
     cutoff_at    DATETIME(3) NOT NULL,
     status       VARCHAR(30) NOT NULL,   -- STARTED / TARGET_FIXED / ALLOCATED / UNFILLABLE_PUBLISHED / SHIPMENT_CREATED / VERIFIED / VERIFY_FAILED
     target_count INT         NULL,
-    input_line_count INT     NULL,   -- 할당을 시작할 때 적는 입력 품목 수. 결과 검증이 쓴다
+    input_quantity INT       NULL,   -- 할당을 시작할 때 한 번만 적는 입력 대기 수량 합. 결과 검증이 쓴다
     updated_at   DATETIME(3) NOT NULL,
     PRIMARY KEY (cutoff_at)
 );
@@ -20,15 +20,21 @@ CREATE TABLE shipment_target (
     KEY idx_target_status_paid (status, paid_at)
 );
 
--- 품목마다 상태가 있다. 할당의 입력은 WAITING 품목뿐이라 이월해도 출고된 품목이 다시 나가지 않는다
+-- 품목의 상태는 수량으로 센다. 다섯 수량의 합은 늘 quantity 다. 할당의 입력은 대기 수량뿐이다
 CREATE TABLE shipment_target_line (
     order_no           VARCHAR(30) NOT NULL,
     product_id         BIGINT      NOT NULL,
     quantity           INT         NOT NULL,
-    status             VARCHAR(20) NOT NULL,   -- WAITING / SHIPPED / UNFILLED / EXCEPTION / CANCELLED
-    assigned_cutoff_at DATETIME(3) NULL,       -- 대상 확정이 기록하는 회차. 이월하면 다음 회차로 바꾼다
+    waiting_qty        INT         NOT NULL,
+    shipped_qty        INT         NOT NULL DEFAULT 0,
+    unfilled_qty       INT         NOT NULL DEFAULT 0,
+    exception_qty      INT         NOT NULL DEFAULT 0,
+    cancelled_qty      INT         NOT NULL DEFAULT 0,
+    assigned_cutoff_at DATETIME(3) NULL,       -- 대기 수량이 배정된 회차. 이월하면 다음 회차로 바꾼다
     PRIMARY KEY (order_no, product_id),
-    KEY idx_target_line_cutoff_status (assigned_cutoff_at, status)
+    KEY idx_target_line_cutoff (assigned_cutoff_at),
+    CONSTRAINT ck_target_line_sum CHECK (waiting_qty + shipped_qty + unfilled_qty + exception_qty + cancelled_qty = quantity),
+    CONSTRAINT ck_target_line_nonneg CHECK (waiting_qty >= 0 AND shipped_qty >= 0 AND unfilled_qty >= 0 AND exception_qty >= 0 AND cancelled_qty >= 0)
 );
 
 -- 센터별 실물 재고는 풀필먼트가 가진다. 출고 지시와 같은 트랜잭션에서 차감한다
@@ -72,7 +78,7 @@ CREATE TABLE allocation_result (
     KEY idx_allocation_center_order (cutoff_at, center_id, order_no)
 );
 
--- 못 채운 품목의 판정. 할당이 끝난 뒤 판정 발행 스텝이 아웃박스로 낸다
+-- 못 채운 수량의 판정. 할당은 여기까지만 쓰고, 품목 수량 이동과 이벤트는 판정 발행 스텝이 한다
 CREATE TABLE unfillable_decision (
     cutoff_at  DATETIME(3) NOT NULL,
     order_no   VARCHAR(30) NOT NULL,
@@ -102,17 +108,25 @@ CREATE TABLE shipment_order_line (
     PRIMARY KEY (shipment_order_id, product_id)
 );
 
--- 출고 지시를 만들지 못한 (센터, 주문). id 가 예외 번호다. 사람이 예외 품목만 이월하거나 관리자 취소한다
+-- 출고 지시를 만들지 못한 (센터, 주문). id 가 예외 번호다. 사람이 풀필먼트 관리 API 로 이월하거나 관리자 취소한다
+-- 두 처리 모두 status = 'OPEN' 조건부 갱신이라 한 예외에 한 번만 일어난다
 CREATE TABLE shipment_exception (
     id         BIGINT       NOT NULL AUTO_INCREMENT,
     cutoff_at  DATETIME(3)  NOT NULL,
     order_no   VARCHAR(30)  NOT NULL,
     center_id  VARCHAR(20)  NOT NULL,
     reason     VARCHAR(200) NOT NULL,
-    status     VARCHAR(20)  NOT NULL,   -- OPEN / RESOLVED
+    status     VARCHAR(20)  NOT NULL,   -- OPEN / DEFERRED / CANCELLED
     created_at DATETIME(3)  NOT NULL,
     PRIMARY KEY (id),
     UNIQUE KEY uk_shipment_exception (cutoff_at, order_no, center_id)
+);
+
+CREATE TABLE shipment_exception_line (
+    shipment_exception_id BIGINT NOT NULL,
+    product_id            BIGINT NOT NULL,
+    quantity              INT    NOT NULL,
+    PRIMARY KEY (shipment_exception_id, product_id)
 );
 
 -- 상태 변경과 같은 트랜잭션에 기록하고 릴레이가 선점, 전송, 기록 세 단계로 발행한다 (docs/design/03)

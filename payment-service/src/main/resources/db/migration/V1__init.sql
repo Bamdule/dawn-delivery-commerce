@@ -5,7 +5,7 @@ CREATE TABLE payment_order (
     PRIMARY KEY (order_no)
 );
 
--- 같은 주문의 같은 결제 회차는 한 번만 승인한다. 새 회차는 가장 최근 회차가 FAILED 일 때만 연다 (docs/design/04)
+-- 같은 주문의 같은 결제 회차는 한 번만 승인한다. 새 회차는 가장 최근 회차가 FAILED 나 EXPIRED 일 때만 연다 (docs/design/04)
 CREATE TABLE payment (
     id                BIGINT      NOT NULL AUTO_INCREMENT,
     order_no          VARCHAR(30) NOT NULL,

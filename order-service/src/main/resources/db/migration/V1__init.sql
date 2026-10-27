@@ -46,7 +46,7 @@ CREATE TABLE refund_request (
     payment_round   INT         NOT NULL,   -- 환불할 결제 회차. 보통은 paid_round, 쓰이지 않은 승인이면 그 회차
     amount          BIGINT      NOT NULL,
     reason          VARCHAR(30) NOT NULL,   -- CUSTOMER_CANCEL / UNFILLABLE_PARTIAL / UNFILLABLE_CANCEL / ADMIN_CANCEL / ORPHAN_APPROVAL
-    status          VARCHAR(20) NOT NULL,   -- REQUESTED / ACCEPTED / COMPLETED / FAILED. FAILED 도 사람이 확정하면 COMPLETED
+    status          VARCHAR(20) NOT NULL,   -- REQUESTED / ACCEPTED / COMPLETED / FAILED / REJECTED. FAILED 와 REJECTED 는 사람이 확정
     attempt_count   INT         NOT NULL DEFAULT 0,
     next_attempt_at DATETIME(3) NOT NULL,
     created_at      DATETIME(3) NOT NULL,

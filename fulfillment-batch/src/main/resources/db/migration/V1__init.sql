@@ -14,19 +14,20 @@ CREATE TABLE shipment_target (
     status             VARCHAR(20) NOT NULL,   -- WAITING / CANCELLED
     region_code        VARCHAR(20) NULL,
     paid_at            DATETIME(3) NULL,
-    assigned_cutoff_at DATETIME(3) NULL,       -- 대상 확정이 기록하는 회차. 이월하면 다음 회차로 바꾼다
-    deferred           BOOLEAN     NOT NULL DEFAULT FALSE,
     updated_at  DATETIME(3) NOT NULL,
     PRIMARY KEY (order_no),
-    KEY idx_target_status_paid (status, paid_at),
-    KEY idx_target_assigned (assigned_cutoff_at)
+    KEY idx_target_status_paid (status, paid_at)
 );
 
+-- 품목마다 상태가 있다. 할당의 입력은 WAITING 품목뿐이라 이월해도 출고된 품목이 다시 나가지 않는다
 CREATE TABLE shipment_target_line (
-    order_no   VARCHAR(30) NOT NULL,
-    product_id BIGINT      NOT NULL,
-    quantity   INT         NOT NULL,
-    PRIMARY KEY (order_no, product_id)
+    order_no           VARCHAR(30) NOT NULL,
+    product_id         BIGINT      NOT NULL,
+    quantity           INT         NOT NULL,
+    status             VARCHAR(20) NOT NULL,   -- WAITING / SHIPPED / UNFILLED / EXCEPTION / CANCELLED
+    assigned_cutoff_at DATETIME(3) NULL,       -- 대상 확정이 기록하는 회차. 이월하면 다음 회차로 바꾼다
+    PRIMARY KEY (order_no, product_id),
+    KEY idx_target_line_cutoff_status (assigned_cutoff_at, status)
 );
 
 -- 센터별 실물 재고는 풀필먼트가 가진다. 출고 지시와 같은 트랜잭션에서 차감한다
@@ -70,13 +71,15 @@ CREATE TABLE allocation_result (
     KEY idx_allocation_center_order (cutoff_at, center_id, order_no)
 );
 
+-- 못 채운 품목의 판정. 할당이 끝난 뒤 판정 발행 스텝이 아웃박스로 낸다
 CREATE TABLE unfillable_decision (
     cutoff_at  DATETIME(3) NOT NULL,
     order_no   VARCHAR(30) NOT NULL,
-    decision   VARCHAR(20) NOT NULL,   -- PARTIAL / CANCEL
+    product_id BIGINT      NOT NULL,
+    quantity   INT         NOT NULL,
     reason     VARCHAR(30) NOT NULL,   -- STOCKTAKE_GAP / INBOUND_DELAY / ALLOCATION_FAILED
     created_at DATETIME(3) NOT NULL,
-    PRIMARY KEY (cutoff_at, order_no)
+    PRIMARY KEY (cutoff_at, order_no, product_id)
 );
 
 -- (마감 시각, 주문, 센터)마다 하나. 이미 있으면 삽입도 재고 차감도 하지 않는다
@@ -98,7 +101,7 @@ CREATE TABLE shipment_order_line (
     PRIMARY KEY (shipment_order_id, product_id)
 );
 
--- 주소 오류처럼 데이터가 잘못된 주문. 사람이 고쳐 다음 회차로 넘기거나 취소한다
+-- 출고 지시를 만들지 못한 (센터, 주문). id 가 예외 번호다. 사람이 예외 품목만 이월하거나 관리자 취소한다
 CREATE TABLE shipment_exception (
     id         BIGINT       NOT NULL AUTO_INCREMENT,
     cutoff_at  DATETIME(3)  NOT NULL,

@@ -5,6 +5,7 @@ CREATE TABLE stock (
     quantity     INT         NOT NULL,
     slot_mode    VARCHAR(10) NOT NULL DEFAULT 'NONE',   -- NONE / SPREAD / MERGED
     hold_minutes INT         NOT NULL DEFAULT 10,       -- 예약 유지 시간. 특가 상품은 3
+    deficit      INT         NOT NULL DEFAULT 0,        -- 실사로 줄이지 못한 부족분. 복원과 입고가 먼저 갚는다
     updated_at   DATETIME(3) NOT NULL,
     PRIMARY KEY (product_id),
     CONSTRAINT ck_stock_quantity CHECK (quantity >= 0)
@@ -21,15 +22,15 @@ CREATE TABLE stock_slot (
 );
 
 -- 주문과 상품마다 한 행. 다시 결제해도 새로 만들지 않는다
--- PAYING 에는 결제 회차와 기한을 남긴다. 되돌림과 만료는 그 회차를 조건으로 건다 (docs/design/02)
+-- PAYING 에는 결제 회차를 남긴다. 되돌림과 만료는 그 회차를 조건으로 걸고, 만료는 회차를 봉인한 뒤에만 푼다 (docs/design/02)
 CREATE TABLE stock_reservation (
     reservation_id VARCHAR(40) NOT NULL,
     order_no       VARCHAR(30) NOT NULL,
     product_id     BIGINT      NOT NULL,
     quantity       INT         NOT NULL,
-    status           VARCHAR(20) NOT NULL,   -- HELD / PAYING / CONFIRMED / RELEASED / RESTORED
-    payment_round    INT         NULL,
-    payment_deadline DATETIME(3) NULL,
+    status             VARCHAR(20) NOT NULL,   -- HELD / PAYING / CONFIRMED / RELEASED / RESTORED
+    payment_round      INT         NULL,
+    cancelled_quantity INT         NOT NULL DEFAULT 0,   -- 품목 취소로 되돌린 수량. quantity 에 이르면 RESTORED
     expires_at       DATETIME(3) NOT NULL,
     created_at     DATETIME(3) NOT NULL,
     updated_at     DATETIME(3) NOT NULL,

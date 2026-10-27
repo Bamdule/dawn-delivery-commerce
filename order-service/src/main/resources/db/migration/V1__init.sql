@@ -13,6 +13,7 @@ CREATE TABLE orders (
     address         VARCHAR(200) NOT NULL,
     region_code     VARCHAR(20)  NOT NULL,
     cancel_reason   VARCHAR(30)  NULL,       -- CUSTOMER / UNFILLABLE / ADMIN
+    reservation_expires_at DATETIME(3) NULL, -- 예약 응답으로 받은 한 주문의 만료 시각
     created_at      DATETIME(3)  NOT NULL,
     paid_at         DATETIME(3)  NULL,       -- 마감 회차의 기준 시각 (docs/design/05)
     updated_at      DATETIME(3)  NOT NULL,
@@ -29,6 +30,7 @@ CREATE TABLE order_item (
     product_id BIGINT NOT NULL,
     quantity   INT    NOT NULL,
     unit_price BIGINT NOT NULL,
+    cancelled_quantity INT NOT NULL DEFAULT 0,   -- 취소는 품목 단위. quantity 를 넘지 않는다
     PRIMARY KEY (id),
     UNIQUE KEY uk_order_item_product (order_id, product_id)
 );
@@ -37,10 +39,11 @@ CREATE TABLE order_item (
 CREATE TABLE refund_request (
     id              BIGINT      NOT NULL AUTO_INCREMENT,
     order_no        VARCHAR(30) NOT NULL,
-    refund_key      VARCHAR(80) NOT NULL,   -- refund-{주문번호}-cancel / -cutoff-{마감일시} / -admin / -orphan-{회차}
+    refund_key      VARCHAR(80) NOT NULL,   -- refund-{주문번호}-cancel / -cutoff-{마감일시} / -admin-{예외번호} / -orphan-{회차}
+    payment_round   INT         NOT NULL,   -- 환불할 결제 회차. 보통은 paid_round, 쓰이지 않은 승인이면 그 회차
     amount          BIGINT      NOT NULL,
     reason          VARCHAR(30) NOT NULL,   -- CUSTOMER_CANCEL / UNFILLABLE_PARTIAL / UNFILLABLE_CANCEL / ADMIN_CANCEL / ORPHAN_APPROVAL
-    status          VARCHAR(20) NOT NULL,   -- REQUESTED / ACCEPTED / COMPLETED / FAILED
+    status          VARCHAR(20) NOT NULL,   -- REQUESTED / ACCEPTED / COMPLETED / FAILED. FAILED 도 사람이 확정하면 COMPLETED
     attempt_count   INT         NOT NULL DEFAULT 0,
     next_attempt_at DATETIME(3) NOT NULL,
     created_at      DATETIME(3) NOT NULL,

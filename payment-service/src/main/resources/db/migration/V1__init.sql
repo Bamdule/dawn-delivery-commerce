@@ -5,7 +5,7 @@ CREATE TABLE payment (
     payment_round     INT         NOT NULL,
     idempotency_key   VARCHAR(80) NOT NULL,   -- order-{주문번호}-payment-{결제회차}. 대행사 조회도 이 키로 한다
     amount            BIGINT      NOT NULL,
-    status            VARCHAR(20) NOT NULL,   -- REQUESTED / APPROVED / FAILED / UNKNOWN
+    status            VARCHAR(20) NOT NULL,   -- REQUESTED / APPROVED / FAILED / UNKNOWN / EXPIRED (봉인. 금액 0, 대행사 호출 없음)
     pg_transaction_id VARCHAR(80) NULL,
     failure_code      VARCHAR(50) NULL,
     attempt_count     INT         NOT NULL DEFAULT 0,

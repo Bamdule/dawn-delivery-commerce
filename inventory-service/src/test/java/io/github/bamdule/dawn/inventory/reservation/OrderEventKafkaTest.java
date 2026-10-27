@@ -2,6 +2,7 @@ package io.github.bamdule.dawn.inventory.reservation;
 
 import static org.assertj.core.api.Assertions.assertThat;
 
+import io.github.bamdule.dawn.event.CancelReason;
 import io.github.bamdule.dawn.event.OrderEvent;
 import io.github.bamdule.dawn.event.OrderEventType;
 import io.github.bamdule.dawn.event.Topics;
@@ -57,5 +58,24 @@ class OrderEventKafkaTest {
             status = InventoryFixture.statusOf(jdbcClient, orderNo, productId);
         }
         assertThat(status).isEqualTo("CONFIRMED");
+    }
+    @Test
+    void order_events_토픽의_CANCELLED_를_받아_재고를_되돌린다() throws Exception {
+        long productId = InventoryFixture.newProduct(jdbcClient, 3, 10);
+        String orderNo = InventoryFixture.newOrderNo();
+        reservations.reserve(new ReservationCommand(orderNo, "SEOUL", List.of(new StockLine(productId, 2))));
+        OrderEvent cancelled = new OrderEvent(UUID.randomUUID(), OrderEventType.CANCELLED, orderNo, 1L, 20_000L,
+                List.of(new OrderEvent.OrderLine(productId, 2)), CancelReason.CUSTOMER, Instant.now());
+
+        kafkaTemplate.send(Topics.ORDER_EVENTS, orderNo, jsonMapper.writeValueAsString(cancelled)).get();
+
+        long deadline = System.currentTimeMillis() + 20_000;
+        String status = "HELD";
+        while (!"RESTORED".equals(status) && System.currentTimeMillis() < deadline) {
+            Thread.sleep(200);
+            status = InventoryFixture.statusOf(jdbcClient, orderNo, productId);
+        }
+        assertThat(status).isEqualTo("RESTORED");
+        assertThat(InventoryFixture.quantityOf(jdbcClient, productId)).isEqualTo(3);
     }
 }

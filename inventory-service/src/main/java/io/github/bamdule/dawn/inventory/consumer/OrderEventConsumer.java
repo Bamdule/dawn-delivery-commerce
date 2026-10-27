@@ -25,6 +25,8 @@ public class OrderEventConsumer {
         this.inboxRepository = inboxRepository;
     }
 
+    // 같은 클래스의 handle 을 직접 부르면 프록시를 거치지 않아 handle 의 트랜잭션이 걸리지 않는다. 여기서 연다
+    @Transactional
     @KafkaListener(topics = Topics.ORDER_EVENTS, groupId = "inventory-service")
     public void onMessage(String payload) {
         handle(jsonMapper.readValue(payload, OrderEvent.class));

@@ -310,12 +310,13 @@ class ReservationIntegrationTest {
 
     private OrderEvent paid(String orderNo, long productId, int quantity) {
         return new OrderEvent(UUID.randomUUID(), OrderEventType.PAID, orderNo, 1L, 10_000L,
-                List.of(new OrderEvent.OrderLine(productId, quantity)), null, Instant.now());
+                List.of(new OrderEvent.OrderLine(productId, quantity)), null,
+                new OrderEvent.Delivery("김새벽", "서울시 강남구 테헤란로 1", "SEOUL"), LocalDateTime.of(2026, 10, 28, 22, 0), Instant.now());
     }
 
     private OrderEvent cancelled(String orderNo, long productId, int quantity) {
         return new OrderEvent(UUID.randomUUID(), OrderEventType.CANCELLED, orderNo, 1L, 10_000L,
-                List.of(new OrderEvent.OrderLine(productId, quantity)), CancelReason.CUSTOMER, Instant.now());
+                List.of(new OrderEvent.OrderLine(productId, quantity)), CancelReason.CUSTOMER, null, null, Instant.now());
     }
 
     private LocalDateTime dbNow() {

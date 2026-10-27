@@ -4,6 +4,7 @@ import static org.assertj.core.api.Assertions.assertThat;
 import static org.assertj.core.api.Assertions.assertThatThrownBy;
 
 import java.time.Instant;
+import java.time.LocalDateTime;
 import java.util.ArrayList;
 import java.util.List;
 import java.util.UUID;
@@ -32,19 +33,26 @@ class OrderEventTest {
     @Test
     void 주문번호가_없으면_만들_수_없다() {
         assertThatThrownBy(() -> new OrderEvent(
-                UUID.randomUUID(), OrderEventType.PAID, null, 1L, 45_000L, List.of(), null, Instant.now()))
+                UUID.randomUUID(), OrderEventType.PAID, null, 1L, 45_000L, List.of(), null, null, null, Instant.now()))
                 .isInstanceOf(NullPointerException.class);
     }
 
     @Test
     void 취소_이벤트는_사유가_있어야_한다() {
         assertThatThrownBy(() -> new OrderEvent(
-                UUID.randomUUID(), OrderEventType.CANCELLED, "20261028-000123", 1L, 0L, List.of(), null, Instant.now()))
+                UUID.randomUUID(), OrderEventType.CANCELLED, "20261028-000123", 1L, 0L, List.of(), null, null, null, Instant.now()))
+                .isInstanceOf(IllegalArgumentException.class);
+    }
+
+    @Test
+    void 결제_완료_이벤트는_배송지와_결제_완료_시각이_있어야_한다() {
+        assertThatThrownBy(() -> new OrderEvent(
+                UUID.randomUUID(), OrderEventType.PAID, "20261028-000123", 1L, 45_000L, List.of(), null, null, null, Instant.now()))
                 .isInstanceOf(IllegalArgumentException.class);
     }
 
     private OrderEvent paidEvent(List<OrderEvent.OrderLine> lines) {
         return new OrderEvent(UUID.randomUUID(), OrderEventType.PAID, "20261028-000123", 1L, 45_000L,
-                lines, null, Instant.now());
+                lines, null, new OrderEvent.Delivery("김새벽", "서울시 강남구 테헤란로 1", "SEOUL"), LocalDateTime.of(2026, 10, 28, 22, 0), Instant.now());
     }
 }

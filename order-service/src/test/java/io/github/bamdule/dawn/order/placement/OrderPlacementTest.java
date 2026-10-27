@@ -24,6 +24,7 @@ import io.github.bamdule.dawn.order.client.ReserveResult;
 import io.github.bamdule.dawn.order.store.OrderRow;
 import java.time.LocalDateTime;
 import java.util.List;
+import java.util.Map;
 import java.util.Optional;
 import java.util.concurrent.CountDownLatch;
 import java.util.concurrent.ExecutorService;
@@ -62,6 +63,22 @@ class OrderPlacementTest extends OrderIntegrationTest {
         assertThat(orderRow.reservationExpiresAt()).isNotNull();
         assertThat(outboxTypes(result.orderNo())).containsExactly("PAID");
         verify(paymentClient).approve(result.orderNo(), 1, 25_000, "CARD");
+    }
+
+    @Test
+    void PAID_이벤트에_배송지와_주문_DB_의_결제_완료_시각이_실린다() {
+        OrderResult result = placeOne(10_000);
+
+        Map<String, Object> payload = jdbcClient.sql("""
+                SELECT JSON_UNQUOTE(JSON_EXTRACT(payload, '$.delivery.regionCode')) AS region_code,
+                       JSON_UNQUOTE(JSON_EXTRACT(payload, '$.delivery.address')) AS address,
+                       JSON_UNQUOTE(JSON_EXTRACT(payload, '$.paidAt')) AS paid_at
+                  FROM outbox_event WHERE partition_key = :orderNo
+                """)
+                .param("orderNo", result.orderNo()).query().singleRow();
+
+        assertThat(payload).containsEntry("region_code", "SEOUL").containsEntry("address", "서울시 강남구 테헤란로 1");
+        assertThat(LocalDateTime.parse((String) payload.get("paid_at"))).isEqualTo(order(result.orderNo()).paidAt());
     }
 
     @Test

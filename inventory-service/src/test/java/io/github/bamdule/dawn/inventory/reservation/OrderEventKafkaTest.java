@@ -10,6 +10,7 @@ import io.github.bamdule.dawn.inventory.stock.StockLine;
 import io.github.bamdule.dawn.messaging.test.KafkaContainers;
 import io.github.bamdule.dawn.messaging.test.MySqlContainers;
 import java.time.Instant;
+import java.time.LocalDateTime;
 import java.util.List;
 import java.util.UUID;
 import org.junit.jupiter.api.Test;
@@ -47,7 +48,8 @@ class OrderEventKafkaTest {
         reservations.reserve(new ReservationCommand(orderNo, "SEOUL", List.of(new StockLine(productId, 1))));
         reservations.markPaying(orderNo, 1);
         OrderEvent paid = new OrderEvent(UUID.randomUUID(), OrderEventType.PAID, orderNo, 1L, 10_000L,
-                List.of(new OrderEvent.OrderLine(productId, 1)), null, Instant.now());
+                List.of(new OrderEvent.OrderLine(productId, 1)), null,
+                new OrderEvent.Delivery("김새벽", "서울시 강남구 테헤란로 1", "SEOUL"), LocalDateTime.of(2026, 10, 28, 22, 0), Instant.now());
 
         kafkaTemplate.send(Topics.ORDER_EVENTS, orderNo, jsonMapper.writeValueAsString(paid)).get();
 
@@ -65,7 +67,7 @@ class OrderEventKafkaTest {
         String orderNo = InventoryFixture.newOrderNo();
         reservations.reserve(new ReservationCommand(orderNo, "SEOUL", List.of(new StockLine(productId, 2))));
         OrderEvent cancelled = new OrderEvent(UUID.randomUUID(), OrderEventType.CANCELLED, orderNo, 1L, 20_000L,
-                List.of(new OrderEvent.OrderLine(productId, 2)), CancelReason.CUSTOMER, Instant.now());
+                List.of(new OrderEvent.OrderLine(productId, 2)), CancelReason.CUSTOMER, null, null, Instant.now());
 
         kafkaTemplate.send(Topics.ORDER_EVENTS, orderNo, jsonMapper.writeValueAsString(cancelled)).get();
 

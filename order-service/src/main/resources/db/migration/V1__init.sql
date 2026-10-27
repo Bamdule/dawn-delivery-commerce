@@ -7,12 +7,14 @@ CREATE TABLE orders (
     status          VARCHAR(20)  NOT NULL,   -- PENDING / PAID / FAILED / CANCELLED
     total_amount    BIGINT       NOT NULL,
     refunded_amount BIGINT       NOT NULL DEFAULT 0,
-    payment_round   INT          NOT NULL DEFAULT 1,   -- 주문 서비스가 정하는 다음 결제 회차. 결제 서비스가 검사한다
+    payment_round   INT          NOT NULL DEFAULT 0,   -- 마지막으로 시작한 결제 회차. 시도를 시작할 때 1 올린다
+    payment_attempt VARCHAR(20)  NOT NULL DEFAULT 'IDLE',   -- IDLE / IN_PROGRESS. 주문당 결제 시도는 한 번에 하나
+    attempt_started_at DATETIME(3) NULL,
     paid_round      INT          NULL,                 -- 주문을 PAID 로 만든 승인 회차. 다른 회차의 승인은 환불한다
     recipient_name  VARCHAR(50)  NOT NULL,
     address         VARCHAR(200) NOT NULL,
     region_code     VARCHAR(20)  NOT NULL,
-    cancel_reason   VARCHAR(30)  NULL,       -- CUSTOMER / UNFILLABLE / ADMIN
+    cancel_reason   VARCHAR(30)  NULL,       -- 주문 전체가 취소됐을 때의 마지막 사유. 품목별 사유는 refund_request.reason
     reservation_expires_at DATETIME(3) NULL, -- 예약 응답으로 받은 한 주문의 만료 시각
     created_at      DATETIME(3)  NOT NULL,
     paid_at         DATETIME(3)  NULL,       -- 마감 회차의 기준 시각 (docs/design/05)
@@ -21,7 +23,8 @@ CREATE TABLE orders (
     UNIQUE KEY uk_orders_order_no (order_no),
     UNIQUE KEY uk_orders_checkout_id (checkout_id),
     KEY idx_orders_status_created (status, created_at),
-    KEY idx_orders_status_paid (status, paid_at)
+    KEY idx_orders_status_paid (status, paid_at),
+    KEY idx_orders_attempt (payment_attempt, attempt_started_at)
 );
 
 CREATE TABLE order_item (

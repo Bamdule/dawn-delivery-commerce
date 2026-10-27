@@ -1,3 +1,10 @@
+-- 주문마다 한 행. 회차 열기, 봉인, 환불, 이벤트 기록은 이 행을 먼저 잠가 주문 안에서 한 줄로 세운다
+CREATE TABLE payment_order (
+    order_no   VARCHAR(30) NOT NULL,
+    updated_at DATETIME(3) NOT NULL,
+    PRIMARY KEY (order_no)
+);
+
 -- 같은 주문의 같은 결제 회차는 한 번만 승인한다. 새 회차는 가장 최근 회차가 FAILED 일 때만 연다 (docs/design/04)
 CREATE TABLE payment (
     id                BIGINT      NOT NULL AUTO_INCREMENT,

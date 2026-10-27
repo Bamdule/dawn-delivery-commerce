@@ -3,6 +3,7 @@ CREATE TABLE cutoff_run (
     cutoff_at    DATETIME(3) NOT NULL,
     status       VARCHAR(30) NOT NULL,   -- STARTED / TARGET_FIXED / ALLOCATED / UNFILLABLE_PUBLISHED / SHIPMENT_CREATED / VERIFIED / VERIFY_FAILED
     target_count INT         NULL,
+    input_line_count INT     NULL,   -- 할당을 시작할 때 적는 입력 품목 수. 결과 검증이 쓴다
     updated_at   DATETIME(3) NOT NULL,
     PRIMARY KEY (cutoff_at)
 );

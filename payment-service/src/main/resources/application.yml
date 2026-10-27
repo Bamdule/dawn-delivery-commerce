@@ -9,6 +9,8 @@ spring:
     open-in-view: false
     hibernate:
       ddl-auto: validate
+  kafka:
+    bootstrap-servers: localhost:19092
 
 server:
   port: 8083

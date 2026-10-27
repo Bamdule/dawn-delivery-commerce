@@ -75,6 +75,17 @@ public class ReservationRepository {
                 .list();
     }
 
+    // 만료 여부는 재고 DB 의 시계로 판단한다. 주문 서비스가 자기 시계와 비교하면 두 DB 의 시차만큼 틀린다
+    public Optional<ReservationState> findState(String orderNo) {
+        return jdbcClient.sql("""
+                SELECT status, payment_round, expires_at, expires_at <= NOW(3) AS expired
+                  FROM stock_reservation WHERE order_no = :orderNo ORDER BY product_id LIMIT 1
+                """)
+                .param("orderNo", orderNo)
+                .query(ReservationState.class)
+                .optional();
+    }
+
     public Optional<ReservationRow> findForUpdate(String orderNo, long productId) {
         return jdbcClient.sql("""
                 SELECT reservation_id, order_no, product_id, quantity, cancelled_quantity, status, payment_round, expires_at

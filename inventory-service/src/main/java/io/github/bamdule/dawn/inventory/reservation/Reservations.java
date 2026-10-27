@@ -8,6 +8,7 @@ import java.time.LocalDateTime;
 import java.util.List;
 import io.github.bamdule.dawn.inventory.stock.SlotAllocation;
 import java.util.Map;
+import java.util.Optional;
 import org.springframework.dao.DuplicateKeyException;
 import org.springframework.jdbc.core.simple.JdbcClient;
 import org.springframework.stereotype.Service;
@@ -98,15 +99,19 @@ public class Reservations {
             if (changed == rows.size()) {
                 return MarkPayingResult.marked(paymentRound, rows.getFirst().expiresAt());
             }
+            ReservationState reread = reservationRepository.findState(orderNo).orElseThrow();
             if (changed > 0) {
                 // 만료 경계에서 만료 배치가 한 행을 먼저 풀었다. 바뀐 행만 되돌리고 결제하지 않게 한다
                 status.setRollbackOnly();
+                return MarkPayingResult.notMarked(new ReservationState(ReservationStatus.RELEASED, reread.paymentRound(),
+                        reread.expiresAt(), true));
             }
-            ReservationRow current = rows.getFirst();
-            ReservationRow reread = reservationRepository.findByOrderNo(orderNo).getFirst();
-            return MarkPayingResult.notMarked(changed > 0 ? ReservationStatus.RELEASED : reread.status(),
-                    reread.paymentRound(), current.expiresAt());
+            return MarkPayingResult.notMarked(reread);
         });
+    }
+
+    public Optional<ReservationState> currentState(String orderNo) {
+        return reservationRepository.findState(orderNo);
     }
 
     public boolean revertPaying(String orderNo, int paymentRound) {

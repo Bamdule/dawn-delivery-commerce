@@ -1,10 +1,16 @@
 spring:
   application:
     name: order-service
+  threads:
+    virtual:
+      enabled: true
   datasource:
     url: jdbc:mysql://localhost:13306/order_db
     username: dawn
     password: dawn
+    # 짧은 트랜잭션만 커넥션을 쓴다. 특가 첫 1초에 동시 38개, 여유 50% (docs/design/01 "스레드와 커넥션")
+    hikari:
+      maximum-pool-size: 60
   jpa:
     open-in-view: false
     hibernate:
@@ -19,4 +25,10 @@ management:
   endpoints:
     web:
       exposure:
-        include: health,info
+        include: health,info,metrics
+
+dawn:
+  inventory:
+    base-url: http://localhost:8082
+  payment:
+    base-url: http://localhost:8083

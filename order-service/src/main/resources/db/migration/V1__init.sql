@@ -42,13 +42,14 @@ CREATE TABLE order_item (
 CREATE TABLE refund_request (
     id              BIGINT      NOT NULL AUTO_INCREMENT,
     order_no        VARCHAR(30) NOT NULL,
-    refund_key      VARCHAR(80) NOT NULL,   -- refund-{주문번호}-cancel / -cutoff-{마감일시} / -admin-{예외번호} / -orphan-{회차}
+    refund_key      VARCHAR(80) NOT NULL,   -- refund-{주문번호}-cancel / -cutoff-{마감일시} / -admin-{예외번호} / -orphan-{회차} / -reissue-{원래 요청 번호}
     payment_round   INT         NOT NULL,   -- 환불할 결제 회차. 보통은 paid_round, 쓰이지 않은 승인이면 그 회차
     amount          BIGINT      NOT NULL,
     reason          VARCHAR(30) NOT NULL,   -- CUSTOMER_CANCEL / UNFILLABLE_PARTIAL / UNFILLABLE_CANCEL / ADMIN_CANCEL / ORPHAN_APPROVAL
     status          VARCHAR(20) NOT NULL,   -- REQUESTED / ACCEPTED / COMPLETED / FAILED / REJECTED. FAILED 와 REJECTED 는 사람이 확정
     attempt_count   INT         NOT NULL DEFAULT 0,
     next_attempt_at DATETIME(3) NOT NULL,
+    accepted_at     DATETIME(3) NULL,       -- ACCEPTED 로 2시간 넘으면 경보. 1시간 넘으면 환불 배치가 결제 서비스에 상태를 묻는다
     created_at      DATETIME(3) NOT NULL,
     updated_at      DATETIME(3) NOT NULL,
     PRIMARY KEY (id),

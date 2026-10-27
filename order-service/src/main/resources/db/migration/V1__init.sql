@@ -32,7 +32,7 @@ CREATE TABLE order_item (
     order_id   BIGINT NOT NULL,
     product_id BIGINT NOT NULL,
     quantity   INT    NOT NULL,
-    unit_price BIGINT NOT NULL,
+    unit_price BIGINT NOT NULL,   -- 쿠폰 할인을 품목에 나눠 반영한 실제 결제 단가. 환불 금액은 이 값으로 센다
     cancelled_quantity INT NOT NULL DEFAULT 0,   -- 취소는 품목 단위. quantity 를 넘지 않는다
     PRIMARY KEY (id),
     UNIQUE KEY uk_order_item_product (order_id, product_id)
@@ -63,7 +63,7 @@ CREATE TABLE outbox_event (
     topic           VARCHAR(100) NOT NULL,
     partition_key   VARCHAR(100) NOT NULL,
     payload         JSON         NOT NULL,
-    status          VARCHAR(20)  NOT NULL,   -- PENDING / SENT. 버리는 상태는 두지 않는다
+    status          VARCHAR(20)  NOT NULL,   -- PENDING / SENT / QUARANTINED (사람만 격리)
     attempt_count   INT          NOT NULL DEFAULT 0,
     next_attempt_at DATETIME(3)  NOT NULL,
     created_at      DATETIME(3)  NOT NULL,

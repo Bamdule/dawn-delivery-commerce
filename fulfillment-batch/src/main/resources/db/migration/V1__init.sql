@@ -14,6 +14,8 @@ CREATE TABLE shipment_target (
     order_no    VARCHAR(30) NOT NULL,
     status             VARCHAR(20) NOT NULL,   -- WAITING / CANCELLED
     region_code        VARCHAR(20) NULL,
+    recipient_name     VARCHAR(50)  NULL,
+    address            VARCHAR(200) NULL,       -- PAID 이벤트에서 복사한 배송지. 주소 오류는 관리 API 로 여기서 고친다
     paid_at            DATETIME(3) NULL,
     updated_at  DATETIME(3) NOT NULL,
     PRIMARY KEY (order_no),
@@ -30,7 +32,7 @@ CREATE TABLE shipment_target_line (
     unfilled_qty       INT         NOT NULL DEFAULT 0,
     exception_qty      INT         NOT NULL DEFAULT 0,
     cancelled_qty      INT         NOT NULL DEFAULT 0,
-    assigned_cutoff_at DATETIME(3) NULL,       -- 대기 수량이 배정된 회차. 이월하면 다음 회차로 바꾼다
+    assigned_cutoff_at DATETIME(3) NULL,       -- 대기 수량이 배정된 회차. 이월하면 비우고, 대상 확정이 비었거나 지난 회차를 이번 회차로 가져간다
     PRIMARY KEY (order_no, product_id),
     KEY idx_target_line_cutoff (assigned_cutoff_at),
     CONSTRAINT ck_target_line_sum CHECK (waiting_qty + shipped_qty + unfilled_qty + exception_qty + cancelled_qty = quantity),
@@ -56,6 +58,15 @@ CREATE TABLE stock_adjustment (
     reason      VARCHAR(30) NOT NULL,   -- INBOUND / STOCKTAKE
     created_at  DATETIME(3) NOT NULL,
     PRIMARY KEY (id)
+);
+
+-- 대상 확정이 세 번 어긋났을 때 남기는 차이 목록. 사람이 보고 출고 대상을 바로잡는다
+CREATE TABLE target_fix_diff (
+    cutoff_at  DATETIME(3) NOT NULL,
+    order_no   VARCHAR(30) NOT NULL,
+    kind       VARCHAR(30) NOT NULL,   -- MISSING_IN_TARGET / CANCELLED_MARK_BUT_PAID / EXTRA_IN_TARGET
+    created_at DATETIME(3) NOT NULL,
+    PRIMARY KEY (cutoff_at, order_no)
 );
 
 -- 할당을 시작할 때 고정한 센터 재고. 다시 계산해도 같은 입력을 쓴다
@@ -136,7 +147,7 @@ CREATE TABLE outbox_event (
     topic           VARCHAR(100) NOT NULL,
     partition_key   VARCHAR(100) NOT NULL,
     payload         JSON         NOT NULL,
-    status          VARCHAR(20)  NOT NULL,   -- PENDING / SENT. 버리는 상태는 두지 않는다
+    status          VARCHAR(20)  NOT NULL,   -- PENDING / SENT / QUARANTINED (사람만 격리)
     attempt_count   INT          NOT NULL DEFAULT 0,
     next_attempt_at DATETIME(3)  NOT NULL,
     created_at      DATETIME(3)  NOT NULL,

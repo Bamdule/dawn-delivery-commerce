@@ -63,7 +63,7 @@ CREATE TABLE outbox_event (
     topic           VARCHAR(100) NOT NULL,
     partition_key   VARCHAR(100) NOT NULL,
     payload         JSON         NOT NULL,
-    status          VARCHAR(20)  NOT NULL,   -- PENDING / SENT. 버리는 상태는 두지 않는다
+    status          VARCHAR(20)  NOT NULL,   -- PENDING / SENT / QUARANTINED (사람만 격리)
     attempt_count   INT          NOT NULL DEFAULT 0,
     next_attempt_at DATETIME(3)  NOT NULL,
     created_at      DATETIME(3)  NOT NULL,

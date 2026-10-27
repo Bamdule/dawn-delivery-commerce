@@ -47,6 +47,14 @@ CREATE TABLE reservation_slot (
     PRIMARY KEY (reservation_id, slot_no)
 );
 
+-- 권역 불일치가 반복된 상품을 그 권역에 팔지 않는다. 예약할 때 확인한다 (docs/design/05)
+CREATE TABLE stock_region_block (
+    product_id  BIGINT      NOT NULL,
+    region_code VARCHAR(20) NOT NULL,
+    created_at  DATETIME(3) NOT NULL,
+    PRIMARY KEY (product_id, region_code)
+);
+
 -- 실사 조정을 0 에서 멈췄을 때 요청한 값과 반영한 값
 CREATE TABLE stock_adjustment_log (
     id              BIGINT      NOT NULL AUTO_INCREMENT,

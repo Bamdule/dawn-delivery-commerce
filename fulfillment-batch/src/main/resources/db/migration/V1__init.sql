@@ -84,7 +84,7 @@ CREATE TABLE unfillable_decision (
     order_no   VARCHAR(30) NOT NULL,
     product_id BIGINT      NOT NULL,
     quantity   INT         NOT NULL,
-    reason     VARCHAR(30) NOT NULL,   -- STOCKTAKE_GAP / INBOUND_DELAY / ALLOCATION_FAILED
+    reason     VARCHAR(30) NOT NULL,   -- STOCKTAKE_GAP / INBOUND_DELAY / REGION_MISMATCH
     created_at DATETIME(3) NOT NULL,
     PRIMARY KEY (cutoff_at, order_no, product_id)
 );
@@ -95,7 +95,7 @@ CREATE TABLE shipment_order (
     cutoff_at  DATETIME(3) NOT NULL,
     order_no   VARCHAR(30) NOT NULL,
     center_id  VARCHAR(20) NOT NULL,
-    status     VARCHAR(20) NOT NULL,   -- CREATED / SHIPPED
+    status     VARCHAR(20) NOT NULL,   -- CREATED / SHIPPED / CANCELLED (배차 전 관리자 취소. 실물 재고를 되돌리고 출고 예외로)
     created_at DATETIME(3) NOT NULL,
     PRIMARY KEY (id),
     UNIQUE KEY uk_shipment_order (cutoff_at, order_no, center_id)

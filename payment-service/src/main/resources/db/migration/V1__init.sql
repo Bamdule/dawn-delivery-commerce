@@ -47,7 +47,8 @@ CREATE TABLE settlement_mismatch (
     id                BIGINT      NOT NULL AUTO_INCREMENT,
     settlement_date   DATE        NOT NULL,
     idempotency_key   VARCHAR(80) NOT NULL,
-    pg_status         VARCHAR(20) NOT NULL,
+    kind              VARCHAR(30) NOT NULL,   -- PG_APPROVED_OURS_FAILED / OURS_APPROVED_PG_MISSING / REFUND_STATUS_DIFF
+    pg_status         VARCHAR(20) NULL,
     our_status        VARCHAR(20) NULL,
     resolution        VARCHAR(20) NOT NULL,   -- OPEN / REFUNDED / CORRECTED
     created_at        DATETIME(3) NOT NULL,

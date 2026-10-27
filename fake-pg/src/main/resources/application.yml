@@ -1,0 +1,12 @@
+spring:
+  application:
+    name: fake-pg
+
+server:
+  port: 8090
+
+management:
+  endpoints:
+    web:
+      exposure:
+        include: health,info

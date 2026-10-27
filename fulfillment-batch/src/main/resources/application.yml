@@ -1,0 +1,27 @@
+spring:
+  application:
+    name: fulfillment-batch
+  datasource:
+    url: jdbc:mysql://localhost:13306/fulfillment_db
+    username: dawn
+    password: dawn
+  jpa:
+    open-in-view: false
+    hibernate:
+      ddl-auto: validate
+  batch:
+    jdbc:
+      initialize-schema: always
+    job:
+      enabled: false
+  kafka:
+    bootstrap-servers: localhost:19092
+
+server:
+  port: 8084
+
+management:
+  endpoints:
+    web:
+      exposure:
+        include: health,info

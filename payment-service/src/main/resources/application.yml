@@ -1,0 +1,20 @@
+spring:
+  application:
+    name: payment-service
+  datasource:
+    url: jdbc:mysql://localhost:13306/payment_db
+    username: dawn
+    password: dawn
+  jpa:
+    open-in-view: false
+    hibernate:
+      ddl-auto: validate
+
+server:
+  port: 8083
+
+management:
+  endpoints:
+    web:
+      exposure:
+        include: health,info

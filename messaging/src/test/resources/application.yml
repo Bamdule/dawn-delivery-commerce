@@ -1,0 +1,12 @@
+spring:
+  sql:
+    init:
+      mode: always
+  kafka:
+    consumer:
+      auto-offset-reset: earliest
+
+dawn:
+  outbox:
+    relay:
+      enabled: false

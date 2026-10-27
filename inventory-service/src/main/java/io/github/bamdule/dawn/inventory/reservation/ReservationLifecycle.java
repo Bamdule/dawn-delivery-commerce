@@ -46,14 +46,14 @@ public class ReservationLifecycle {
             return;
         }
         int restorable = Math.min(quantity, reservationRow.remainingQuantity());
-        sellableStock.increase(productId, restorable);
+        giveBack(reservationRow, restorable);
         reservationRepository.addCancelled(reservationRow.reservationId(), restorable);
     }
 
     @Transactional
     public void releaseExpiredHeld(ReservationRow reservationRow) {
         if (reservationRepository.releaseHeld(reservationRow.reservationId())) {
-            sellableStock.increase(reservationRow.productId(), reservationRow.remainingQuantity());
+            giveBack(reservationRow, reservationRow.remainingQuantity());
         }
     }
 
@@ -61,9 +61,16 @@ public class ReservationLifecycle {
     public void releasePaying(String orderNo, int paymentRound) {
         for (ReservationRow reservationRow : reservationRepository.findByOrderNo(orderNo)) {
             if (reservationRepository.releasePaying(reservationRow.reservationId(), paymentRound)) {
-                sellableStock.increase(reservationRow.productId(), reservationRow.remainingQuantity());
+                giveBack(reservationRow, reservationRow.remainingQuantity());
             }
         }
+    }
+
+    // 슬롯 상품은 예약 때 뺀 슬롯 내역대로 돌려놓고, 돌려놓은 만큼 내역을 줄인다
+    private void giveBack(ReservationRow reservationRow, int quantity) {
+        sellableStock.increase(reservationRow.productId(), quantity,
+                reservationRepository.findSlotAllocations(reservationRow.reservationId()));
+        reservationRepository.consumeSlotAllocations(reservationRow.reservationId(), quantity);
     }
 
     @Transactional

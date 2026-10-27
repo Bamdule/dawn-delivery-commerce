@@ -135,10 +135,14 @@ class ReservationIntegrationTest {
                 markedCount++;
                 assertThat(status).isEqualTo("PAYING");
                 assertThat(quantity).as("결제가 시작됐는데 재고가 풀리면 안 된다").isZero();
-            } else {
+            } else if (status.equals("RELEASED")) {
                 releasedCount++;
-                assertThat(status).isEqualTo("RELEASED");
                 assertThat(quantity).isEqualTo(1);
+            } else {
+                // 해제는 만료 직전에, 결제 시작은 만료 직후에 와서 둘 다 0행인 경우다. 만료된 HELD 로 남아 다음 배치가 푼다
+                assertThat(status).isEqualTo("HELD");
+                assertThat(isExpired(orderNo)).isTrue();
+                assertThat(quantity).isZero();
             }
         }
         System.out.printf("결제 시작이 이긴 횟수=%d, 만료가 이긴 횟수=%d%n", markedCount, releasedCount);
@@ -284,6 +288,11 @@ class ReservationIntegrationTest {
         assertThat(reservations.markPaying(orderNo, 1).marked()).isTrue();
         InventoryFixture.expireNow(jdbcClient, orderNo);
         return orderNo;
+    }
+
+    private boolean isExpired(String orderNo) {
+        return jdbcClient.sql("SELECT COUNT(*) FROM stock_reservation WHERE order_no = :orderNo AND expires_at <= NOW(3)")
+                .param("orderNo", orderNo).query(Integer.class).single() > 0;
     }
 
     private Object releaseExpired(String orderNo) {

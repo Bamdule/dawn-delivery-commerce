@@ -1,6 +1,8 @@
 package io.github.bamdule.dawn.inventory.stock;
 
 import java.util.List;
+import java.util.Map;
+import java.util.stream.Collectors;
 import org.springframework.jdbc.core.simple.JdbcClient;
 import org.springframework.stereotype.Repository;
 
@@ -25,6 +27,22 @@ public class StockRepository {
                 .param("productId", productId)
                 .param("quantity", quantity)
                 .update() == 1;
+    }
+
+    public Map<Long, SlotMode> findModes(List<Long> productIds) {
+        return jdbcClient.sql("SELECT product_id, slot_mode FROM stock WHERE product_id IN (:productIds)")
+                .param("productIds", productIds)
+                .query((resultSet, rowNum) -> Map.entry(resultSet.getLong("product_id"), SlotMode.valueOf(resultSet.getString("slot_mode"))))
+                .list()
+                .stream()
+                .collect(Collectors.toMap(Map.Entry::getKey, Map.Entry::getValue));
+    }
+
+    public SlotMode findMode(long productId) {
+        return SlotMode.valueOf(jdbcClient.sql("SELECT slot_mode FROM stock WHERE product_id = :productId")
+                .param("productId", productId)
+                .query(String.class)
+                .single());
     }
 
     // 슬롯 상품은 슬롯 합이 판매 가능 재고라 stock.quantity 대신 슬롯을 더해 본다

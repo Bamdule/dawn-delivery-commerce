@@ -6,12 +6,19 @@ import org.springframework.context.annotation.Bean;
 import org.testcontainers.kafka.KafkaContainer;
 import org.testcontainers.utility.DockerImageName;
 
+// MySqlContainers 와 같은 이유로 JVM 하나에 한 벌만 띄운다
 @TestConfiguration(proxyBeanMethods = false)
 public class KafkaContainers {
 
-    @Bean
+    private static final KafkaContainer KAFKA_CONTAINER = new KafkaContainer(DockerImageName.parse("apache/kafka:4.0.0"));
+
+    static {
+        KAFKA_CONTAINER.start();
+    }
+
+    @Bean(destroyMethod = "")
     @ServiceConnection
     public KafkaContainer kafkaContainer() {
-        return new KafkaContainer(DockerImageName.parse("apache/kafka:4.0.0"));
+        return KAFKA_CONTAINER;
     }
 }

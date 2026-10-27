@@ -1,5 +1,6 @@
 package io.github.bamdule.dawn.inventory.stock;
 
+import java.util.List;
 import org.springframework.jdbc.core.simple.JdbcClient;
 import org.springframework.stereotype.Component;
 import org.springframework.transaction.annotation.Propagation;
@@ -9,17 +10,23 @@ import org.springframework.transaction.annotation.Transactional;
 @Component
 public class SellableStock {
 
-    private static final int SLOT_ZERO = 0;
-
     private final JdbcClient jdbcClient;
+    private final SlotStock slotStock;
 
-    public SellableStock(JdbcClient jdbcClient) {
+    public SellableStock(JdbcClient jdbcClient, SlotStock slotStock) {
         this.jdbcClient = jdbcClient;
+        this.slotStock = slotStock;
+    }
+
+    // 입고처럼 슬롯 내역이 없는 증가
+    @Transactional(propagation = Propagation.MANDATORY)
+    public void increase(long productId, int quantity) {
+        increase(productId, quantity, List.of());
     }
 
     // 만료 해제, 취소 복원, 입고는 모두 이 길로 온다. 부족분부터 갚고 남은 것만 판매 가능 재고에 더한다
     @Transactional(propagation = Propagation.MANDATORY)
-    public void increase(long productId, int quantity) {
+    public void increase(long productId, int quantity, List<SlotAllocation> allocations) {
         StockState stockState = lock(productId);
         int repaid = Math.min(stockState.deficit(), quantity);
         int remaining = quantity - repaid;
@@ -30,25 +37,24 @@ public class SellableStock {
         if (remaining == 0) {
             return;
         }
-        if ("NONE".equals(stockState.slotMode())) {
+        if (stockState.slotMode() == SlotMode.NONE) {
             jdbcClient.sql("UPDATE stock SET quantity = quantity + :quantity WHERE product_id = :productId")
                     .param("quantity", remaining)
                     .param("productId", productId)
                     .update();
             return;
         }
-        // 슬롯 상품의 되돌림 자리는 3번 작업에서 슬롯 내역대로 세분한다. 내역이 없거나 MERGED 면 슬롯 0 이다
-        jdbcClient.sql("UPDATE stock_slot SET quantity = quantity + :quantity, updated_at = NOW(3) WHERE product_id = :productId AND slot_no = :slotNo")
-                .param("quantity", remaining)
-                .param("productId", productId)
-                .param("slotNo", SLOT_ZERO)
-                .update();
+        slotStock.giveBack(productId, remaining, stockState.slotMode(), allocations);
     }
 
-    // 실사 감소. 판매 가능 재고는 0 아래로 내리지 않고, 내리지 못한 만큼을 부족분으로 들고 있는다
+    // 실사 감소. 판매 가능 재고는 0 아래로 내리지 않고, 내리지 못한 만큼을 부족분으로 들고 있는다.
+    // 슬롯 상품의 실사 감소는 6번 입고와 실사 작업에서 슬롯 번호 순으로 뺀다
     @Transactional(propagation = Propagation.MANDATORY)
     public void decreaseForStocktake(String eventId, long productId, int quantity) {
         StockState stockState = lock(productId);
+        if (stockState.slotMode() != SlotMode.NONE) {
+            throw new UnsupportedOperationException("슬롯 상품의 실사 감소는 아직 지원하지 않습니다.");
+        }
         int applied = Math.min(stockState.quantity(), quantity);
         jdbcClient.sql("""
                 UPDATE stock
@@ -78,6 +84,6 @@ public class SellableStock {
                 .single();
     }
 
-    private record StockState(int quantity, int deficit, String slotMode) {
+    private record StockState(int quantity, int deficit, SlotMode slotMode) {
     }
 }

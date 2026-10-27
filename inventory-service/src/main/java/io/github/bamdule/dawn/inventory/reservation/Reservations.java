@@ -1,10 +1,13 @@
 package io.github.bamdule.dawn.inventory.reservation;
 
 import io.github.bamdule.dawn.inventory.stock.OutOfStockException;
+import io.github.bamdule.dawn.inventory.stock.RandomSlotMissException;
 import io.github.bamdule.dawn.inventory.stock.StockDeduction;
 import io.github.bamdule.dawn.inventory.stock.StockLine;
 import java.time.LocalDateTime;
 import java.util.List;
+import io.github.bamdule.dawn.inventory.stock.SlotAllocation;
+import java.util.Map;
 import org.springframework.dao.DuplicateKeyException;
 import org.springframework.jdbc.core.simple.JdbcClient;
 import org.springframework.stereotype.Service;
@@ -33,24 +36,35 @@ public class Reservations {
             return existing.getFirst().expiresAt();
         }
         try {
-            return transactionTemplate.execute(status -> reserveNew(reservationCommand));
+            return reserveWithOrderedRetry(reservationCommand);
         } catch (DuplicateKeyException duplicateKeyException) {
             // 같은 요청이 동시에 들어와 다른 쪽이 먼저 커밋했다. 이쪽 차감은 함께 되돌아갔다
             return reservationRepository.findByOrderNo(reservationCommand.orderNo()).getFirst().expiresAt();
         }
     }
 
-    private LocalDateTime reserveNew(ReservationCommand reservationCommand) {
+    // 무작위 슬롯이 모자라면 트랜잭션을 되돌려 잠금을 모두 풀고, 슬롯 번호 순으로만 잠그는 방식으로 다시 한다
+    private LocalDateTime reserveWithOrderedRetry(ReservationCommand reservationCommand) {
+        try {
+            return transactionTemplate.execute(status -> reserveNew(reservationCommand, false));
+        } catch (RandomSlotMissException randomSlotMissException) {
+            return transactionTemplate.execute(status -> reserveNew(reservationCommand, true));
+        }
+    }
+
+    private LocalDateTime reserveNew(ReservationCommand reservationCommand, boolean orderedSlotsOnly) {
         for (StockLine stockLine : reservationCommand.lines()) {
             if (isBlocked(stockLine.productId(), reservationCommand.regionCode())) {
                 throw new OutOfStockException(stockLine.productId());
             }
         }
-        stockDeduction.deduct(reservationCommand.lines());
+        Map<Long, List<SlotAllocation>> allocations = stockDeduction.deduct(reservationCommand.lines(), orderedSlotsOnly);
         LocalDateTime expiresAt = expiresAtFor(reservationCommand.lines());
         for (StockLine stockLine : reservationCommand.lines()) {
-            reservationRepository.insertHeld(reservationCommand.orderNo(), stockLine.productId(),
+            String reservationId = reservationRepository.insertHeld(reservationCommand.orderNo(), stockLine.productId(),
                     stockLine.quantity(), expiresAt);
+            allocations.getOrDefault(stockLine.productId(), List.of())
+                    .forEach(slotAllocation -> reservationRepository.insertSlotAllocation(reservationId, slotAllocation));
         }
         return expiresAt;
     }

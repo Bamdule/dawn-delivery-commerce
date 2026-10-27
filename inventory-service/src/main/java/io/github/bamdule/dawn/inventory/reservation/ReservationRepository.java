@@ -1,5 +1,6 @@
 package io.github.bamdule.dawn.inventory.reservation;
 
+import io.github.bamdule.dawn.inventory.stock.SlotAllocation;
 import java.time.LocalDateTime;
 import java.util.List;
 import java.util.Optional;
@@ -16,18 +17,52 @@ public class ReservationRepository {
         this.jdbcClient = jdbcClient;
     }
 
-    public void insertHeld(String orderNo, long productId, int quantity, LocalDateTime expiresAt) {
+    public String insertHeld(String orderNo, long productId, int quantity, LocalDateTime expiresAt) {
+        String reservationId = UUID.randomUUID().toString();
         jdbcClient.sql("""
                 INSERT INTO stock_reservation
                     (reservation_id, order_no, product_id, quantity, status, expires_at, created_at, updated_at)
                 VALUES (:reservationId, :orderNo, :productId, :quantity, 'HELD', :expiresAt, NOW(3), NOW(3))
                 """)
-                .param("reservationId", UUID.randomUUID().toString())
+                .param("reservationId", reservationId)
                 .param("orderNo", orderNo)
                 .param("productId", productId)
                 .param("quantity", quantity)
                 .param("expiresAt", expiresAt)
                 .update();
+        return reservationId;
+    }
+
+    public void insertSlotAllocation(String reservationId, SlotAllocation slotAllocation) {
+        jdbcClient.sql("INSERT INTO reservation_slot (reservation_id, slot_no, quantity) VALUES (:reservationId, :slotNo, :quantity)")
+                .param("reservationId", reservationId)
+                .param("slotNo", slotAllocation.slotNo())
+                .param("quantity", slotAllocation.quantity())
+                .update();
+    }
+
+    public List<SlotAllocation> findSlotAllocations(String reservationId) {
+        return jdbcClient.sql("SELECT slot_no, quantity FROM reservation_slot WHERE reservation_id = :reservationId AND quantity > 0 ORDER BY slot_no")
+                .param("reservationId", reservationId)
+                .query(SlotAllocation.class)
+                .list();
+    }
+
+    // 되돌린 만큼 내역을 줄여, 부분 취소 뒤 만료가 와도 같은 슬롯에 두 번 돌려놓지 않는다
+    public void consumeSlotAllocations(String reservationId, int quantity) {
+        int remaining = quantity;
+        for (SlotAllocation slotAllocation : findSlotAllocations(reservationId)) {
+            int consumed = Math.min(slotAllocation.quantity(), remaining);
+            jdbcClient.sql("UPDATE reservation_slot SET quantity = quantity - :consumed WHERE reservation_id = :reservationId AND slot_no = :slotNo")
+                    .param("consumed", consumed)
+                    .param("reservationId", reservationId)
+                    .param("slotNo", slotAllocation.slotNo())
+                    .update();
+            remaining -= consumed;
+            if (remaining == 0) {
+                return;
+            }
+        }
     }
 
     public List<ReservationRow> findByOrderNo(String orderNo) {

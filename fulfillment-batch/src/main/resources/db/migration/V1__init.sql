@@ -3,7 +3,7 @@ CREATE TABLE cutoff_run (
     cutoff_at    DATETIME(3) NOT NULL,
     status       VARCHAR(30) NOT NULL,   -- STARTED / TARGET_FIXED / ALLOCATED / UNFILLABLE_PUBLISHED / SHIPMENT_CREATED / VERIFIED / VERIFY_FAILED
     target_count INT         NULL,
-    input_quantity INT       NULL,   -- 할당을 시작할 때 한 번만 적는 입력 대기 수량 합. 결과 검증이 쓴다
+    input_quantity INT       NULL,   -- 할당 입력 표(allocation_input)의 수량 합. 결과 검증이 쓴다
     updated_at   DATETIME(3) NOT NULL,
     PRIMARY KEY (cutoff_at)
 );
@@ -32,7 +32,7 @@ CREATE TABLE shipment_target_line (
     unfilled_qty       INT         NOT NULL DEFAULT 0,
     exception_qty      INT         NOT NULL DEFAULT 0,
     cancelled_qty      INT         NOT NULL DEFAULT 0,
-    assigned_cutoff_at DATETIME(3) NULL,       -- 대기 수량이 배정된 회차. 이월하면 비우고, 대상 확정이 비었거나 지난 회차를 이번 회차로 가져간다
+    assigned_cutoff_at DATETIME(3) NULL,       -- 대기 수량이 배정된 회차. 비었으면 목록에 오른 주문만 가져가고, 이월은 값을 그대로 둬 다음 대상 확정이 지난 회차로 가져간다
     PRIMARY KEY (order_no, product_id),
     KEY idx_target_line_cutoff (assigned_cutoff_at),
     CONSTRAINT ck_target_line_sum CHECK (waiting_qty + shipped_qty + unfilled_qty + exception_qty + cancelled_qty = quantity),
@@ -67,6 +67,18 @@ CREATE TABLE target_fix_diff (
     kind       VARCHAR(30) NOT NULL,   -- MISSING_IN_TARGET / CANCELLED_MARK_BUT_PAID / EXTRA_IN_TARGET
     created_at DATETIME(3) NOT NULL,
     PRIMARY KEY (cutoff_at, order_no)
+);
+
+-- 대상 확정이 끝날 때 고정한 할당 입력. 할당과 재시작은 이 표만 읽어, 배치 중 이월이 품목 행을 바꿔도 입력이 같다
+CREATE TABLE allocation_input (
+    cutoff_at   DATETIME(3) NOT NULL,
+    order_no    VARCHAR(30) NOT NULL,
+    product_id  BIGINT      NOT NULL,
+    quantity    INT         NOT NULL,
+    region_code VARCHAR(20) NOT NULL,
+    paid_at     DATETIME(3) NOT NULL,   -- 할당 순서. 먼저 결제한 주문이 먼저다
+    PRIMARY KEY (cutoff_at, order_no, product_id),
+    KEY idx_allocation_input_order (cutoff_at, paid_at, order_no)
 );
 
 -- 할당을 시작할 때 고정한 센터 재고. 다시 계산해도 같은 입력을 쓴다

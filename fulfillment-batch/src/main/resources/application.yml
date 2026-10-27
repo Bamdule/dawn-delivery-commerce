@@ -12,6 +12,7 @@ spring:
   batch:
     jdbc:
       initialize-schema: always
+    # 잡은 스케줄러나 관리 API 가 마감 시각 파라미터로 시작한다. 기동할 때 저절로 돌지 않게 한다
     job:
       enabled: false
   kafka:
@@ -25,3 +26,7 @@ management:
     web:
       exposure:
         include: health,info
+
+dawn:
+  order:
+    base-url: http://localhost:8081

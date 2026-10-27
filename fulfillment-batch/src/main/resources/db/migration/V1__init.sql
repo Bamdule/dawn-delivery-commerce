@@ -39,6 +39,20 @@ CREATE TABLE shipment_target_line (
     CONSTRAINT ck_target_line_nonneg CHECK (waiting_qty >= 0 AND shipped_qty >= 0 AND unfilled_qty >= 0 AND exception_qty >= 0 AND cancelled_qty >= 0)
 );
 
+-- 물류센터와 그 센터가 있는 권역. 할당 1차와 2차는 주문 권역 안의 센터만 쓴다
+CREATE TABLE center (
+    center_id   VARCHAR(20) NOT NULL,
+    region_code VARCHAR(20) NOT NULL,
+    PRIMARY KEY (center_id)
+);
+
+-- 권역 밖이지만 새벽 도착이 가능한 센터. 할당 3차가 쓴다
+CREATE TABLE center_coverage (
+    center_id   VARCHAR(20) NOT NULL,
+    region_code VARCHAR(20) NOT NULL,
+    PRIMARY KEY (center_id, region_code)
+);
+
 -- 센터별 실물 재고는 풀필먼트가 가진다. 출고 지시와 같은 트랜잭션에서 차감한다
 CREATE TABLE center_stock (
     center_id  VARCHAR(20) NOT NULL,
@@ -150,6 +164,14 @@ CREATE TABLE shipment_exception_line (
     product_id            BIGINT NOT NULL,
     quantity              INT    NOT NULL,
     PRIMARY KEY (shipment_exception_id, product_id)
+);
+
+-- 고객 취소는 대기 수량을 취소 수량으로 옮기는 소비라 인박스로 중복을 막는다 (docs/design/03)
+CREATE TABLE inbox_event (
+    consumer     VARCHAR(50) NOT NULL,
+    event_id     CHAR(36)    NOT NULL,
+    processed_at DATETIME(3) NOT NULL,
+    PRIMARY KEY (consumer, event_id)
 );
 
 -- 상태 변경과 같은 트랜잭션에 기록하고 릴레이가 선점, 전송, 기록 세 단계로 발행한다 (docs/design/03)

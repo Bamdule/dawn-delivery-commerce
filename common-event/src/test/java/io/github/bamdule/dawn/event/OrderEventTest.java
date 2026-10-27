@@ -21,10 +21,10 @@ class OrderEventTest {
     @Test
     void 생성_후_원본_목록을_바꿔도_이벤트는_바뀌지_않는다() {
         List<OrderEvent.OrderLine> lines = new ArrayList<>();
-        lines.add(new OrderEvent.OrderLine(1001L, "r-1", 2));
+        lines.add(new OrderEvent.OrderLine(1001L, 2));
         OrderEvent event = paidEvent(lines);
 
-        lines.add(new OrderEvent.OrderLine(1002L, "r-2", 1));
+        lines.add(new OrderEvent.OrderLine(1002L, 1));
 
         assertThat(event.lines()).hasSize(1);
     }
@@ -32,12 +32,19 @@ class OrderEventTest {
     @Test
     void 주문번호가_없으면_만들_수_없다() {
         assertThatThrownBy(() -> new OrderEvent(
-                UUID.randomUUID(), OrderEventType.PAID, null, 1L, 45_000L, List.of(), Instant.now()))
+                UUID.randomUUID(), OrderEventType.PAID, null, 1L, 45_000L, List.of(), null, Instant.now()))
                 .isInstanceOf(NullPointerException.class);
     }
 
+    @Test
+    void 취소_이벤트는_사유가_있어야_한다() {
+        assertThatThrownBy(() -> new OrderEvent(
+                UUID.randomUUID(), OrderEventType.CANCELLED, "20261028-000123", 1L, 0L, List.of(), null, Instant.now()))
+                .isInstanceOf(IllegalArgumentException.class);
+    }
+
     private OrderEvent paidEvent(List<OrderEvent.OrderLine> lines) {
-        return new OrderEvent(
-                UUID.randomUUID(), OrderEventType.PAID, "20261028-000123", 1L, 45_000L, lines, Instant.now());
+        return new OrderEvent(UUID.randomUUID(), OrderEventType.PAID, "20261028-000123", 1L, 45_000L,
+                lines, null, Instant.now());
     }
 }

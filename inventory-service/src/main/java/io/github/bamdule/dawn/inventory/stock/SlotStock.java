@@ -137,6 +137,24 @@ public class SlotStock {
         }
     }
 
+    // 실사 감소. SPREAD 는 슬롯 번호 순으로 남은 만큼, MERGED 는 슬롯 0 에서만 뺀다. 실제로 뺀 수량을 돌려준다.
+    // 모자란 몫은 부르는 쪽이 부족분에 더한다 (docs/design/02 슬롯 모드 표)
+    @Transactional(propagation = Propagation.MANDATORY)
+    public int takeForStocktake(long productId, int quantity, SlotMode slotMode) {
+        int remaining = quantity;
+        for (SlotRow slotRow : lockSlots(productId)) {
+            if (remaining == 0 || (slotMode == SlotMode.MERGED && slotRow.slotNo() != SLOT_ZERO)) {
+                continue;
+            }
+            int taken = Math.min(slotRow.quantity(), remaining);
+            if (taken > 0) {
+                decreaseSlot(productId, slotRow.slotNo(), taken);
+                remaining -= taken;
+            }
+        }
+        return quantity - remaining;
+    }
+
     private boolean decreaseSlot(long productId, int slotNo, int quantity) {
         return jdbcClient.sql("""
                 UPDATE stock_slot SET quantity = quantity - :quantity, updated_at = NOW(3)

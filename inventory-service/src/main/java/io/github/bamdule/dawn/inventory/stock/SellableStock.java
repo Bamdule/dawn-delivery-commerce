@@ -47,32 +47,41 @@ public class SellableStock {
         slotStock.giveBack(productId, remaining, stockState.slotMode(), allocations);
     }
 
-    // 실사 감소. 판매 가능 재고는 0 아래로 내리지 않고, 내리지 못한 만큼을 부족분으로 들고 있는다.
-    // 슬롯 상품의 실사 감소는 6번 입고와 실사 작업에서 슬롯 번호 순으로 뺀다
+    // 입고나 실사 증가. 부족분부터 갚는 길은 취소 복원과 같고, 조정 이력을 함께 남긴다
+    @Transactional(propagation = Propagation.MANDATORY)
+    public void increaseForAdjustment(String eventId, long productId, int quantity) {
+        increase(productId, quantity);
+        log(eventId, productId, quantity, quantity);
+    }
+
+    // 실사 감소. 판매 가능 재고는 0 아래로 내리지 않고, 내리지 못한 만큼을 부족분으로 들고 있는다
     @Transactional(propagation = Propagation.MANDATORY)
     public void decreaseForStocktake(String eventId, long productId, int quantity) {
         StockState stockState = lock(productId);
-        if (stockState.slotMode() != SlotMode.NONE) {
-            throw new UnsupportedOperationException("슬롯 상품의 실사 감소는 아직 지원하지 않습니다.");
-        }
-        int applied = Math.min(stockState.quantity(), quantity);
+        int applied = stockState.slotMode() == SlotMode.NONE
+                ? Math.min(stockState.quantity(), quantity)
+                : slotStock.takeForStocktake(productId, quantity, stockState.slotMode());
         jdbcClient.sql("""
                 UPDATE stock
-                   SET quantity = quantity - :applied, deficit = deficit + :shortfall, updated_at = NOW(3)
+                   SET quantity = quantity - :fromQuantity, deficit = deficit + :shortfall, updated_at = NOW(3)
                  WHERE product_id = :productId
                 """)
-                .param("applied", applied)
+                .param("fromQuantity", stockState.slotMode() == SlotMode.NONE ? applied : 0)
                 .param("shortfall", quantity - applied)
                 .param("productId", productId)
                 .update();
+        log(eventId, productId, -quantity, -applied);
+    }
+
+    private void log(String eventId, long productId, int requested, int applied) {
         jdbcClient.sql("""
                 INSERT INTO stock_adjustment_log (event_id, product_id, requested_delta, applied_delta, created_at)
                 VALUES (:eventId, :productId, :requested, :applied, NOW(3))
                 """)
                 .param("eventId", eventId)
                 .param("productId", productId)
-                .param("requested", -quantity)
-                .param("applied", -applied)
+                .param("requested", requested)
+                .param("applied", applied)
                 .update();
     }
 

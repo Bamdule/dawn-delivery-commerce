@@ -1,6 +1,10 @@
 spring:
   application:
     name: inventory-service
+  # 요청과 주기 작업을 가상 스레드로 돌린다. 기본 스케줄러는 스레드 하나라, 오래 걸리는 배치가 릴레이와 지표 갱신을 막는다
+  threads:
+    virtual:
+      enabled: true
   datasource:
     url: jdbc:mysql://localhost:13306/inventory_db
     username: dawn

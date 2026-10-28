@@ -8,7 +8,7 @@ import java.util.List;
 import java.util.Map;
 
 // 고정한 입력으로 계산만 한다. 같은 입력이면 결과가 늘 같다 (docs/design/05 "2. 할당").
-// 1차는 권역 안의 한 센터에서 전량 나가는 주문만, 2차는 권역 안 여러 센터로 나눠, 3차는 새벽 도착이 되는 권역 밖 센터로 채운다
+// 1차는 권역 안의 한 센터에서 전량 나가는 주문만(그중 재고가 가장 많이 남은 센터), 2차는 권역 안 여러 센터로 나눠, 3차는 새벽 도착이 되는 권역 밖 센터로 채운다
 public final class Allocator {
 
     static final String REGION_MISMATCH = "REGION_MISMATCH";
@@ -27,12 +27,12 @@ public final class Allocator {
         Map<ResultKey, Integer> results = new LinkedHashMap<>();
 
         for (Order order : orders) {
-            for (String centerId : homeCentersByRegion.getOrDefault(order.regionCode(), List.of())) {
-                if (canShipAll(stock.get(centerId), remaining.get(order.orderNo()))) {
-                    take(order, centerId, stock, remaining, results);
-                    break;
-                }
-            }
+            Map<Long, Integer> needs = remaining.get(order.orderNo());
+            homeCentersByRegion.getOrDefault(order.regionCode(), List.of()).stream()
+                    .filter(centerId -> canShipAll(stock.get(centerId), needs))
+                    .max(Comparator.<String>comparingLong(centerId -> stockFor(stock.get(centerId), needs))
+                            .thenComparing(Comparator.<String>reverseOrder()))
+                    .ifPresent(centerId -> take(order, centerId, stock, remaining, results));
         }
         for (Order order : orders) {
             homeCentersByRegion.getOrDefault(order.regionCode(), List.of())
@@ -43,6 +43,13 @@ public final class Allocator {
                     .forEach(centerId -> take(order, centerId, stock, remaining, results));
         }
         return new Plan(toResults(results), decide(orders, remaining, stock));
+    }
+
+    // 전량 나갈 수 있는 센터가 여럿이면 이 주문의 품목 재고가 가장 많이 남은 센터를 고른다. 같으면 센터 번호가 앞선 쪽이다.
+    // 첫 센터만 고르면 재고가 넉넉한 날 권역의 주문이 모두 한 센터로 몰려 출고 지시 시간이 그 센터에 묶인다
+    // (docs/experiments/04-출고-배치.md)
+    private static long stockFor(Map<Long, Integer> centerStock, Map<Long, Integer> needs) {
+        return needs.keySet().stream().mapToLong(productId -> centerStock.getOrDefault(productId, 0)).sum();
     }
 
     private static boolean canShipAll(Map<Long, Integer> centerStock, Map<Long, Integer> needs) {

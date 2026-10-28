@@ -44,8 +44,7 @@ public class PaymentApproval {
         try {
             pgApproveResult = pgClient.approve(paymentRow.idempotencyKey(), paymentRow.amount(), approveCommand.method());
         } finally {
-            pgCallGuard.exit(pgApproveResult.outcome() == PgApproveResult.Outcome.UNKNOWN,
-                    Duration.between(startedAt, Instant.now()));
+            pgCallGuard.exit(pgApproveResult.countsAsPgFailure(), Duration.between(startedAt, Instant.now()));
         }
         return switch (pgApproveResult.outcome()) {
             case APPROVED -> {
@@ -55,6 +54,11 @@ public class PaymentApproval {
             case DECLINED -> {
                 paymentRounds.recordFailed(paymentRow, pgApproveResult.code());
                 yield new ApproveResult(ApproveOutcome.DECLINED, paymentRow.paymentRound(), pgApproveResult.code());
+            }
+            // 요청이 가지 않았으니 회차를 실패로 닫는다. 주문은 "결제 지연"으로 답하고 예약 유지 시간 안에 다시 결제를 받는다
+            case NOT_SENT -> {
+                paymentRounds.recordFailed(paymentRow, NOT_CALLED);
+                yield new ApproveResult(ApproveOutcome.DECLINED, paymentRow.paymentRound(), NOT_CALLED);
             }
             case UNKNOWN -> {
                 paymentRepository.recordUnknownAttempt(paymentRow.id(), pgApproveResult.code(), FIRST_INQUIRY_DELAY_SECONDS);

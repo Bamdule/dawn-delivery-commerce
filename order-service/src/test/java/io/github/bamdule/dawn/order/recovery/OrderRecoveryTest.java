@@ -237,6 +237,18 @@ class OrderRecoveryTest extends OrderIntegrationTest {
     }
 
     @Test
+    void 결제한_뒤_취소된_주문에_같은_회차의_승인이_다시_와도_환불을_또_요청하지_않는다() {
+        when(paymentClient.approve(any(), anyInt(), anyLong(), any())).thenReturn(new ApproveResult(ApproveOutcome.UNKNOWN, 1, "TIMEOUT"));
+        String orderNo = placeOne(10_000).orderNo();
+        paymentEventConsumer.handle(approved(orderNo, 1, 10_000, false));
+        jdbcClient.sql("UPDATE orders SET status = 'CANCELLED' WHERE order_no = :orderNo").param("orderNo", orderNo).update();
+
+        paymentEventConsumer.handle(approved(orderNo, 1, 10_000, false));
+
+        assertThat(refundKeys(orderNo)).as("이미 그 회차로 결제한 주문이라 중복이다").isEmpty();
+    }
+
+    @Test
     void 실패로_닫은_회차가_늦게_승인되면_그_회차가_환불된다() {
         when(paymentClient.approve(any(), eq(1), anyLong(), any()))
                 .thenReturn(new ApproveResult(ApproveOutcome.DECLINED, 1, "INSUFFICIENT_BALANCE"));

@@ -358,14 +358,23 @@ class PaymentIntegrationTest {
         refundJob.run();
         fakePg.post().uri("/fake/refunds/{key}/status?status=DECLINED", refundKey).retrieve().toBodilessEntity();
 
+        // 응답이 사라져 우리는 결과를 모르는데 대행사는 승인했다
+        String unknownOrder = newOrderNo();
+        nextApprove("NEVER_RECEIVED", 0);
+        approve(unknownOrder, 1);
+        fakePg.post().uri("/fake/payments/{key}/approve?amount=45000", PaymentRounds.idempotencyKey(unknownOrder, 1))
+                .retrieve().toBodilessEntity();
+
         int mismatches = settlementReconciler.reconcile(LocalDate.now());
 
-        assertThat(mismatches).isGreaterThanOrEqualTo(3);
+        assertThat(mismatches).isGreaterThanOrEqualTo(4);
+        assertThat(statusOf(unknownOrder, 1)).as("사람이 확정할 몫이라 바꾸지 않는다").isEqualTo("REQUESTED");
         assertThat(statusOf(lateOrder, 1)).isEqualTo("APPROVED");
         assertThat(correctionEvents(lateOrder)).containsExactly("APPROVED");
         assertThat(refundStatus(refundKey)).isEqualTo("FAILED");
         assertThat(correctionEvents(refundOrder)).containsExactly("REFUND_FAILED");
-        assertThat(mismatchKinds()).contains("PG_APPROVED_OURS_FAILED", "OURS_APPROVED_PG_MISSING", "REFUND_STATUS_DIFF");
+        assertThat(mismatchKinds()).contains("PG_APPROVED_OURS_FAILED", "OURS_APPROVED_PG_MISSING", "REFUND_STATUS_DIFF",
+                "PG_APPROVED_OURS_UNRESOLVED");
     }
 
     private ApproveResult approve(String orderNo, int paymentRound) {

@@ -12,8 +12,10 @@ import io.github.bamdule.dawn.payment.round.PaymentRepository;
 import io.github.bamdule.dawn.payment.round.PaymentRounds;
 import java.time.LocalDate;
 import java.time.ZoneId;
+import java.util.EnumSet;
 import java.util.List;
 import java.util.Map;
+import java.util.Set;
 import java.util.function.Function;
 import java.util.stream.Collectors;
 import org.slf4j.Logger;
@@ -27,6 +29,7 @@ import org.springframework.stereotype.Component;
 public class SettlementReconciler {
 
     private static final Logger log = LoggerFactory.getLogger(SettlementReconciler.class);
+    private static final Set<PaymentStatus> UNRESOLVED = EnumSet.of(PaymentStatus.REQUESTED, PaymentStatus.UNKNOWN);
 
     private final PgClient pgClient;
     private final PaymentRepository paymentRepository;
@@ -60,6 +63,10 @@ public class SettlementReconciler {
             if (ours.isPresent() && ours.get().status() == PaymentStatus.FAILED) {
                 paymentRounds.correctToApproved(ours.get());
                 mismatches += record(date, settledPayment.idempotencyKey(), "PG_APPROVED_OURS_FAILED", "APPROVED", "FAILED");
+            } else if (ours.isPresent() && UNRESOLVED.contains(ours.get().status())) {
+                // 사람이 확정할 몫이라 바꾸지 않는다. 정산 파일이 가장 강한 근거라 그 결과를 남겨 확정에 쓰게 한다
+                mismatches += record(date, settledPayment.idempotencyKey(), "PG_APPROVED_OURS_UNRESOLVED", "APPROVED",
+                        ours.get().status().name());
             }
         }
         for (String ourKey : approvedKeysOn(date)) {

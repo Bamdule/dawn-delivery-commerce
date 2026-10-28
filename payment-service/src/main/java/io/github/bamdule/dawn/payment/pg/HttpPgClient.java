@@ -1,6 +1,8 @@
 package io.github.bamdule.dawn.payment.pg;
 
+import java.net.ConnectException;
 import java.net.http.HttpClient;
+import java.net.http.HttpConnectTimeoutException;
 import java.time.Duration;
 import java.time.LocalDate;
 import org.springframework.beans.factory.annotation.Value;
@@ -57,7 +59,7 @@ public class HttpPgClient implements PgClient {
         } catch (HttpServerErrorException serverErrorException) {
             return PgApproveResult.unknown(UNKNOWN_SERVER_ERROR);
         } catch (ResourceAccessException resourceAccessException) {
-            return PgApproveResult.unknown(UNKNOWN_TIMEOUT);
+            return notSent(resourceAccessException) ? PgApproveResult.notSent() : PgApproveResult.unknown(UNKNOWN_TIMEOUT);
         }
     }
 
@@ -93,6 +95,16 @@ public class HttpPgClient implements PgClient {
         } catch (HttpServerErrorException | ResourceAccessException exception) {
             return "UNKNOWN";
         }
+    }
+
+    // 연결을 맺지 못했으면 요청 바이트가 나가지 않았다. 연결 뒤의 끊김이나 응답 대기 시간 초과는 처리됐을 수 있어 모름이다
+    private static boolean notSent(ResourceAccessException resourceAccessException) {
+        for (Throwable cause = resourceAccessException.getCause(); cause != null; cause = cause.getCause()) {
+            if (cause instanceof ConnectException || cause instanceof HttpConnectTimeoutException) {
+                return true;
+            }
+        }
+        return false;
     }
 
     @Override

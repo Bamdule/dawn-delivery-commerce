@@ -127,8 +127,7 @@ public class RequestedPaymentResolver {
         try {
             pgApproveResult = pgClient.approve(paymentRow.idempotencyKey(), paymentRow.amount(), "RESEND");
         } finally {
-            pgCallGuard.exit(pgApproveResult.outcome() == PgApproveResult.Outcome.UNKNOWN,
-                    Duration.between(startedAt, Instant.now()));
+            pgCallGuard.exit(pgApproveResult.countsAsPgFailure(), Duration.between(startedAt, Instant.now()));
         }
         if (pgApproveResult.outcome() == PgApproveResult.Outcome.APPROVED) {
             paymentRounds.recordApproved(paymentRow);

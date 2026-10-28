@@ -70,6 +70,17 @@ class HttpPgClientTest {
         assertThat(client().refund("refund-1", "key-1", 45_000)).isEqualTo("UNKNOWN");
     }
 
+    @Test
+    void 연결을_맺지_못한_승인은_요청이_가지_않은_것이라_닿지_않음이다() {
+        HttpPgClient closedPort = client();
+        httpServer.stop(0);
+
+        PgApproveResult result = closedPort.approve("key-1", 45_000, "CARD");
+
+        assertThat(result.outcome()).isEqualTo(PgApproveResult.Outcome.NOT_SENT);
+        assertThat(result.countsAsPgFailure()).as("회로 차단기는 대행사 장애로 센다").isTrue();
+    }
+
     private String inquireWith(int status, String body) {
         respond(status, body);
         return client().inquire("key-1");

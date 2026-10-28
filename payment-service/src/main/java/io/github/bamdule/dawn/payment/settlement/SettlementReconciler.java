@@ -11,6 +11,7 @@ import io.github.bamdule.dawn.payment.refund.Refunds;
 import io.github.bamdule.dawn.payment.round.PaymentRepository;
 import io.github.bamdule.dawn.payment.round.PaymentRounds;
 import java.time.LocalDate;
+import java.time.ZoneId;
 import java.util.List;
 import java.util.Map;
 import java.util.function.Function;
@@ -46,7 +47,7 @@ public class SettlementReconciler {
 
     @Scheduled(cron = "${dawn.payment.settlement-cron:0 0 4 * * *}")
     public void reconcileYesterday() {
-        reconcile(LocalDate.now().minusDays(1));
+        reconcile(LocalDate.now(ZoneId.of("Asia/Seoul")).minusDays(1));
     }
 
     public int reconcile(LocalDate date) {

@@ -40,8 +40,11 @@ subprojects {
         options.compilerArgs.add("-parameters")
     }
 
+    // 운영은 서비스와 DB 를 모두 Asia/Seoul 로 둔다. 테스트 MySQL 도 같은 시간대라 테스트 JVM 도 맞춘다.
+    // 맞추지 않으면 UTC 러너(CI)에서 JVM 시계로 만든 시각을 DB 시계와 비교하는 테스트가 9시간 어긋난다
     tasks.withType<Test> {
         useJUnitPlatform()
+        systemProperty("user.timezone", "Asia/Seoul")
     }
 
     // 설계 가정을 재는 실험은 몇 분씩 걸려 기본 빌드에서 뺀다. ./gradlew experiment 로 따로 돌린다 (docs/experiments)

@@ -1,6 +1,7 @@
 package io.github.bamdule.dawn.fulfillment.job;
 
 import java.time.LocalDate;
+import java.time.ZoneId;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 import org.springframework.boot.autoconfigure.condition.ConditionalOnProperty;
@@ -13,6 +14,8 @@ import org.springframework.stereotype.Component;
 public class ShipmentJobScheduler {
 
     private static final Logger log = LoggerFactory.getLogger(ShipmentJobScheduler.class);
+    // 마감 날짜는 서비스가 도는 서버의 시간대와 관계없이 서울 기준이다
+    private static final ZoneId SEOUL = ZoneId.of("Asia/Seoul");
 
     private final ShipmentJobRunner shipmentJobRunner;
 
@@ -23,7 +26,7 @@ public class ShipmentJobScheduler {
     @Scheduled(cron = "${dawn.fulfillment.scheduler.cron:0 10 23 * * *}", zone = "Asia/Seoul")
     public void runTonight() {
         try {
-            shipmentJobRunner.run(shipmentJobRunner.cutoffOf(LocalDate.now()));
+            shipmentJobRunner.run(shipmentJobRunner.cutoffOf(LocalDate.now(SEOUL)));
         } catch (Exception exception) {
             log.error("출고 배치 시작 실패", exception);
         }

@@ -1,6 +1,7 @@
 package io.github.bamdule.dawn.fakepg;
 
 import java.time.LocalDate;
+import java.time.ZoneId;
 import java.util.ArrayList;
 import java.util.List;
 import java.util.Map;
@@ -13,6 +14,9 @@ import org.springframework.stereotype.Component;
 
 @Component
 public class FakePgStore {
+
+    // 대행사의 정산일은 서울 기준이다. 결제 서비스의 정산 대사도 같은 날짜로 묻는다
+    private static final ZoneId SETTLEMENT_ZONE = ZoneId.of("Asia/Seoul");
 
     private final Map<String, PaymentRecord> payments = new ConcurrentHashMap<>();
     private final Map<String, RefundRecord> refunds = new ConcurrentHashMap<>();
@@ -44,7 +48,7 @@ public class FakePgStore {
     }
 
     public void savePayment(String idempotencyKey, String status, long amount) {
-        payments.put(idempotencyKey, new PaymentRecord(idempotencyKey, status, amount, LocalDate.now()));
+        payments.put(idempotencyKey, new PaymentRecord(idempotencyKey, status, amount, LocalDate.now(SETTLEMENT_ZONE)));
     }
 
     public Optional<RefundRecord> refund(String refundKey) {
@@ -52,7 +56,7 @@ public class FakePgStore {
     }
 
     public void saveRefund(String refundKey, String paymentKey, String status, long amount) {
-        refunds.put(refundKey, new RefundRecord(refundKey, paymentKey, status, amount, LocalDate.now()));
+        refunds.put(refundKey, new RefundRecord(refundKey, paymentKey, status, amount, LocalDate.now(SETTLEMENT_ZONE)));
     }
 
     public List<PaymentRecord> approvedOn(LocalDate date) {

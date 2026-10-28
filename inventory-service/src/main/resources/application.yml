@@ -9,6 +9,11 @@ spring:
     url: jdbc:mysql://localhost:13306/inventory_db
     username: dawn
     password: dawn
+    # 예약 트랜잭션은 몰리는 행의 잠금을 기다리는 동안 커넥션을 쥔다. 특가 초당 500건 × 약 100ms = 동시 50 (docs/design/01 "스레드와 커넥션")
+    # 평소에는 10개만 열어 두고 특가에만 64까지 늘린다. 인스턴스마다 64개를 늘 쥐면 DB 연결 한도를 먼저 쓴다
+    hikari:
+      maximum-pool-size: 64
+      minimum-idle: 10
   jpa:
     open-in-view: false
     hibernate:

@@ -18,6 +18,11 @@ jobs:
           distribution: temurin
           java-version: 21
       - uses: gradle/actions/setup-gradle@v4
+      # 경보 규칙의 문법과 시각 기준 경보를 compose 와 같은 Prometheus 이미지로 시험한다
+      - name: 경보 규칙 검사
+        run: |
+          docker run --rm -v "$PWD/infra/prometheus:/p" -w /p --entrypoint promtool prom/prometheus:v3.5.0 check rules alerts.yml
+          docker run --rm -v "$PWD/infra/prometheus:/p" -w /p --entrypoint promtool prom/prometheus:v3.5.0 test rules alerts-test.yml
       - name: 빌드와 테스트
         run: ./gradlew build --no-daemon
       - name: 실패한 테스트 보고서

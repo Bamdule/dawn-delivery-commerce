@@ -69,7 +69,8 @@ subprojects {
         description = "API 문서 테스트의 스니펫을 docs/api 로 합친다"
         group = "documentation"
         dependsOn("test")
-        onlyIf { snippetDirectory.get().asFile.isDirectory }
+        // 테스트의 출력으로 선언해 둔 폴더는 문서 테스트가 없는 모듈에도 생긴다. 스니펫이 있을 때만 만든다
+        onlyIf { snippetDirectory.get().asFile.listFiles { file -> file.isDirectory }.orEmpty().isNotEmpty() }
         doLast {
             val parts = listOf(
                 "description" to null,

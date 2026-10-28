@@ -55,7 +55,7 @@ HTTP/1.1 204 No Content
 **요청**
 
 ```http
-POST /admin/shipment-orders/2/cancel HTTP/1.1
+POST /admin/shipment-orders/4/cancel HTTP/1.1
 Host: localhost:8080
 
 ```
@@ -78,7 +78,7 @@ HTTP/1.1 204 No Content
 **요청**
 
 ```http
-POST /admin/cutoff-runs/2090-11-12T23:00/start HTTP/1.1
+POST /admin/cutoff-runs/2090-11-02T23:00/start HTTP/1.1
 Host: localhost:8080
 
 ```
@@ -110,7 +110,7 @@ Content-Length: 28
 **요청**
 
 ```http
-POST /admin/cutoff-runs/2090-11-11T23:00/approve HTTP/1.1
+POST /admin/cutoff-runs/2090-11-01T23:00/approve HTTP/1.1
 Host: localhost:8080
 
 ```
@@ -133,7 +133,7 @@ HTTP/1.1 204 No Content
 **요청**
 
 ```http
-GET /admin/cutoff-runs/2090-12-01T23:00/target-diffs HTTP/1.1
+GET /admin/cutoff-runs/2090-11-21T23:00/target-diffs HTTP/1.1
 Host: localhost:8080
 
 ```
@@ -150,7 +150,7 @@ Content-Type: application/json
 Content-Length: 81
 
 [ {
-  "orderNo" : "20901231-F000000009",
+  "orderNo" : "20901231-F000000012",
   "kind" : "CANCELLED_MARK_BUT_PAID"
 } ]
 ```
@@ -167,7 +167,7 @@ Content-Length: 81
 **요청**
 
 ```http
-POST /admin/shipment-targets/20901231-F000000009/resync HTTP/1.1
+POST /admin/shipment-targets/20901231-F000000012/resync HTTP/1.1
 Host: localhost:8080
 
 ```
@@ -190,7 +190,7 @@ HTTP/1.1 204 No Content
 **요청**
 
 ```http
-PUT /admin/shipment-targets/20901231-F000000009/address HTTP/1.1
+PUT /admin/shipment-targets/20901231-F000000012/address HTTP/1.1
 Content-Type: application/json;charset=UTF-8
 Content-Length: 89
 Host: localhost:8080
@@ -224,7 +224,7 @@ HTTP/1.1 204 No Content
 **요청**
 
 ```http
-POST /admin/center-stocks/SEOUL-A/900010/inbound HTTP/1.1
+POST /admin/center-stocks/SEOUL-A/900012/inbound HTTP/1.1
 Content-Type: application/json;charset=UTF-8
 Content-Length: 21
 Host: localhost:8080
@@ -257,7 +257,7 @@ HTTP/1.1 204 No Content
 **요청**
 
 ```http
-POST /admin/center-stocks/SEOUL-A/900010/stocktake HTTP/1.1
+POST /admin/center-stocks/SEOUL-A/900012/stocktake HTTP/1.1
 Content-Type: application/json;charset=UTF-8
 Content-Length: 28
 Host: localhost:8080
@@ -305,7 +305,7 @@ Content-Length: 31
 Host: localhost:8080
 
 {
-  "productIds" : [ 900009 ]
+  "productIds" : [ 900011 ]
 }
 ```
 
@@ -321,7 +321,7 @@ Content-Type: application/json
 Content-Length: 82
 
 [ {
-  "productId" : 900009,
+  "productId" : 900011,
   "physicalQuantity" : 10,
   "pendingQuantity" : 2
 } ]
@@ -332,3 +332,35 @@ Content-Length: 82
 | `[].productId` | `Number` | 상품 번호 |
 | `[].physicalQuantity` | `Number` | 센터 실물 재고의 합 |
 | `[].pendingQuantity` | `Number` | 출고 대상 품목의 대기 수량과 예외 수량의 합 |
+
+## 배차 인계
+
+배차가 VERIFIED 회차를 가져가며 부른다. 그 회차의 출고 지시를 HANDED_OVER 로 바꿔, 실사가 피킹 전 수량으로 빼지 않고 출고 지시 취소도 받지 않게 한다. 다시 부르면 0건이다. VERIFIED 가 아니면 409
+
+**요청**
+
+```http
+POST /admin/cutoff-runs/2090-12-01T23:00/hand-over HTTP/1.1
+Host: localhost:8080
+
+```
+
+| 경로 변수 | 설명 |
+|---|---|
+| `cutoffAt` | 마감 시각 |
+
+**응답**
+
+```http
+HTTP/1.1 200 OK
+Content-Type: application/json
+Content-Length: 22
+
+{
+  "handedOver" : 2
+}
+```
+
+| 필드 | 타입 | 설명 |
+|---|---|---|
+| `handedOver` | `Number` | 이번에 넘긴 출고 지시 수 |

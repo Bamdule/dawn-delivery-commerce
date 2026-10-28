@@ -15,7 +15,7 @@ Content-Length: 389
 Host: localhost:8080
 
 {
-  "checkoutId" : "d97f5275-4c4b-4321-bfab-e1399c0ff9c0",
+  "checkoutId" : "5c2d3ce5-0a2e-43c9-a8c9-69db5d1e5980",
   "memberId" : 1001,
   "recipientName" : "김새벽",
   "address" : "서울시 강남구 테헤란로 1",
@@ -53,7 +53,7 @@ Content-Type: application/json
 Content-Length: 139
 
 {
-  "orderNo" : "20261028-J5S00F75EG",
+  "orderNo" : "20261029-XEBU1FNW0D",
   "status" : "PENDING",
   "outcome" : "PAYMENT_DECLINED",
   "failureCode" : "INSUFFICIENT_BALANCE"
@@ -74,7 +74,7 @@ Content-Length: 139
 **요청**
 
 ```http
-POST /orders/20261028-D6T0W4R4S6/payments HTTP/1.1
+POST /orders/20261029-UQZ61WB9W1/payments HTTP/1.1
 Content-Type: application/json;charset=UTF-8
 Content-Length: 36
 Host: localhost:8080
@@ -100,7 +100,7 @@ Content-Type: application/json
 Content-Length: 131
 
 {
-  "orderNo" : "20261028-D6T0W4R4S6",
+  "orderNo" : "20261029-UQZ61WB9W1",
   "status" : "PENDING",
   "outcome" : "PAYMENT_DECLINED",
   "failureCode" : "CARD_EXPIRED"
@@ -121,7 +121,7 @@ Content-Length: 131
 **요청**
 
 ```http
-POST /orders/20261028-XEFYQGMV0H/cancel HTTP/1.1
+POST /orders/20261029-X3RFDJ36CF/cancel HTTP/1.1
 Host: localhost:8080
 
 ```
@@ -138,7 +138,7 @@ Content-Type: application/json
 Content-Length: 66
 
 {
-  "orderNo" : "20261028-XEFYQGMV0H",
+  "orderNo" : "20261029-X3RFDJ36CF",
   "outcome" : "CANCELLED"
 }
 ```
@@ -155,7 +155,7 @@ Content-Length: 66
 **요청**
 
 ```http
-GET /orders/20261028-2Q7ZZF3ELQ HTTP/1.1
+GET /orders/20261029-PULC42N1YA HTTP/1.1
 Host: localhost:8080
 
 ```
@@ -172,13 +172,13 @@ Content-Type: application/json
 Content-Length: 419
 
 {
-  "orderNo" : "20261028-2Q7ZZF3ELQ",
+  "orderNo" : "20261029-PULC42N1YA",
   "status" : "PAID",
   "memberId" : 1,
   "totalAmount" : 25000,
   "refundedAmount" : 0,
   "paidRound" : 1,
-  "paidAt" : "2026-10-28T13:57:42.534",
+  "paidAt" : "2026-10-29T08:36:00.581",
   "recipientName" : "김새벽",
   "address" : "서울시 강남구 테헤란로 1",
   "regionCode" : "SEOUL",
@@ -235,7 +235,7 @@ Content-Type: application/json
 Content-Length: 112
 
 {
-  "orderNos" : [ "20261028-H6TTJH73TD" ],
+  "orderNos" : [ "20261029-683ZMH171U" ],
   "nextCursorPaidAt" : "2031-03-02T21:10:00",
   "nextCursorId" : 6
 }
@@ -254,7 +254,7 @@ Content-Length: 112
 **요청**
 
 ```http
-POST /admin/refunds/refund-20261028-X3DUWU8J20-cancel/reissue HTTP/1.1
+POST /admin/refunds/refund-20261029-N1N0B44RFF-cancel/reissue HTTP/1.1
 Content-Type: application/json;charset=UTF-8
 Content-Length: 22
 Host: localhost:8080
@@ -280,7 +280,7 @@ Content-Type: application/json
 Content-Length: 58
 
 {
-  "refundKey" : "refund-20261028-X3DUWU8J20-reissue-6"
+  "refundKey" : "refund-20261029-N1N0B44RFF-reissue-6"
 }
 ```
 
@@ -309,28 +309,28 @@ Content-Length: 784
 
 [ {
   "seq" : 2,
-  "eventId" : "0ac734fd-a7dc-4788-9803-6e9b5d4b87ac",
+  "eventId" : "c66b7d9d-b5e6-4b6c-8909-253dcc7ac190",
   "topic" : "order.events",
   "partitionKey" : "metrics-test",
   "attemptCount" : 11,
-  "createdAt" : "2026-10-28T13:56:16.64",
-  "nextAttemptAt" : "2026-10-28T14:56:56.64"
+  "createdAt" : "2026-10-29T08:35:18.185",
+  "nextAttemptAt" : "2026-10-29T09:35:58.185"
 }, {
   "seq" : 6,
-  "eventId" : "e976a70b-6587-41f5-a274-9816aaafbdb6",
+  "eventId" : "58a5e801-ea86-4d4e-b6a8-8519800444b3",
   "topic" : "order.events",
-  "partitionKey" : "admin-test-daceeb89-b45f-49af-ac79-ca4fa6ace156",
+  "partitionKey" : "admin-test-8b4f6063-2580-4b1b-afeb-e066cfa3cef6",
   "attemptCount" : 11,
-  "createdAt" : "2026-10-28T13:57:41.147",
-  "nextAttemptAt" : "2026-10-28T13:57:41.161"
+  "createdAt" : "2026-10-29T08:35:58.695",
+  "nextAttemptAt" : "2026-10-29T08:35:58.7"
 }, {
   "seq" : 13,
-  "eventId" : "45486c18-0f2f-4c28-96c6-e1cebb779d7c",
+  "eventId" : "661bce5d-7801-4f69-9210-6a2cfcc80125",
   "topic" : "order.events",
   "partitionKey" : "20261028-K3F9A2Q7XZ",
   "attemptCount" : 11,
-  "createdAt" : "2026-10-28T13:42:42.469",
-  "nextAttemptAt" : "2026-10-28T13:58:42.469"
+  "createdAt" : "2026-10-29T08:21:00.496",
+  "nextAttemptAt" : "2026-10-29T08:37:00.496"
 } ]
 ```
 
@@ -389,3 +389,73 @@ Host: localhost:8080
 HTTP/1.1 204 No Content
 
 ```
+
+## 처리 실패 토픽에 쌓인 메시지 (관리)
+
+이 서비스가 받는 토픽마다 아직 다시 넣지 않은 메시지 수. 받는 서비스(주문, 재고, 풀필먼트)마다 같은 주소로 있다
+
+**요청**
+
+```http
+GET /admin/dead-letters HTTP/1.1
+Host: localhost:8080
+
+```
+
+**응답**
+
+```http
+HTTP/1.1 200 OK
+Content-Type: application/json
+Content-Length: 108
+
+[ {
+  "topic" : "payment.events",
+  "backlog" : 1
+}, {
+  "topic" : "fulfillment.events",
+  "backlog" : 0
+} ]
+```
+
+| 필드 | 타입 | 설명 |
+|---|---|---|
+| `[].topic` | `String` | 원래 토픽. 처리 실패 토픽은 이 이름 뒤에 -dlt 를 붙인다 |
+| `[].backlog` | `Number` | 다시 넣지 않은 메시지 수. 1건이라도 있으면 경보 |
+
+## 처리 실패 토픽 다시 넣기 (관리)
+
+원인을 고친 뒤 같은 키로 원래 토픽에 다시 넣는다. 그 토픽을 읽는 모든 그룹이 다시 받는다. 이 서비스가 받지 않는 토픽이면 404
+
+**요청**
+
+```http
+POST /admin/dead-letters/payment.events/replay?maxRecords=500 HTTP/1.1
+Content-Type: application/x-www-form-urlencoded
+Host: localhost:8080
+
+```
+
+| 경로 변수 | 설명 |
+|---|---|
+| `topic` | 원래 토픽 |
+
+| 쿼리 변수 | 설명 |
+|---|---|
+| `maxRecords` | 이번에 다시 넣을 최대 건수. 기본 500 |
+
+**응답**
+
+```http
+HTTP/1.1 200 OK
+Content-Type: application/json
+Content-Length: 20
+
+{
+  "replayed" : 1
+}
+```
+
+| 필드 | 타입 | 설명 |
+|---|---|---|
+| `replayed` | `Number` | 다시 넣은 메시지 수 |

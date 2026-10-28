@@ -15,7 +15,7 @@ Content-Length: 99
 Host: localhost:8080
 
 {
-  "orderNo" : "20261028-PD24708",
+  "orderNo" : "20261028-PD26250",
   "paymentRound" : 1,
   "amount" : 45000,
   "method" : "CARD"
@@ -56,7 +56,7 @@ Content-Length: 92
 **요청**
 
 ```http
-POST /payments/20261028-PD42458/rounds/2/seal HTTP/1.1
+POST /payments/20261028-PD43125/rounds/2/seal HTTP/1.1
 Host: localhost:8080
 
 ```
@@ -89,7 +89,7 @@ Content-Length: 26
 **요청**
 
 ```http
-GET /payments/20261028-PD59458 HTTP/1.1
+GET /payments/20261028-PD583 HTTP/1.1
 Host: localhost:8080
 
 ```
@@ -131,7 +131,7 @@ Content-Length: 175
 **요청**
 
 ```http
-POST /admin/payments/20261028-PD11750/rounds/1/resolve HTTP/1.1
+POST /admin/payments/20261028-PD13208/rounds/1/resolve HTTP/1.1
 Content-Type: application/json;charset=UTF-8
 Content-Length: 27
 Host: localhost:8080
@@ -170,8 +170,8 @@ Content-Length: 128
 Host: localhost:8080
 
 {
-  "refundKey" : "refund-20261028-PD33000-cancel",
-  "orderNo" : "20261028-PD33000",
+  "refundKey" : "refund-20261028-PD36083-cancel",
+  "orderNo" : "20261028-PD36083",
   "paymentRound" : 1,
   "amount" : 45000
 }
@@ -209,7 +209,7 @@ Content-Length: 54
 **요청**
 
 ```http
-GET /refunds/refund-20261028-PD65625-cancel HTTP/1.1
+GET /refunds/refund-20261028-PD62375-cancel HTTP/1.1
 Host: localhost:8080
 
 ```
@@ -226,7 +226,7 @@ Content-Type: application/json
 Content-Length: 95
 
 {
-  "refundKey" : "refund-20261028-PD65625-cancel",
+  "refundKey" : "refund-20261028-PD62375-cancel",
   "status" : "FAILED",
   "amount" : 45000
 }
@@ -245,7 +245,7 @@ Content-Length: 95
 **요청**
 
 ```http
-POST /admin/refunds/refund-20261028-PD65625-cancel/resolve HTTP/1.1
+POST /admin/refunds/refund-20261028-PD62375-cancel/resolve HTTP/1.1
 Content-Type: application/json;charset=UTF-8
 Content-Length: 28
 Host: localhost:8080

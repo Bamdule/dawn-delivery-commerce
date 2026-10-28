@@ -19,10 +19,10 @@ Host: localhost:8080
 ```http
 HTTP/1.1 200 OK
 Content-Type: application/json
-Content-Length: 31
+Content-Length: 63
 
 {
-  "productIds" : [ 500006 ]
+  "productIds" : [ 100002, 500003, 500004, 500010, 500018 ]
 }
 ```
 
@@ -43,13 +43,13 @@ Content-Length: 187
 Host: localhost:8080
 
 {
-  "orderNo" : "20261028-000001-21000",
+  "orderNo" : "20261028-000706-78333",
   "regionCode" : "SEOUL",
   "lines" : [ {
-    "productId" : 500002,
+    "productId" : 500014,
     "quantity" : 2
   }, {
-    "productId" : 500003,
+    "productId" : 500015,
     "quantity" : 1
   } ]
 }
@@ -70,7 +70,7 @@ Content-Type: application/json
 Content-Length: 44
 
 {
-  "expiresAt" : "2026-10-28T13:58:31.45"
+  "expiresAt" : "2026-10-29T08:48:38.99"
 }
 ```
 
@@ -85,7 +85,7 @@ Content-Length: 44
 **요청**
 
 ```http
-POST /reservations/20261028-000002-54458/paying HTTP/1.1
+POST /reservations/20261028-000707-38958/paying HTTP/1.1
 Content-Type: application/json;charset=UTF-8
 Content-Length: 24
 Host: localhost:8080
@@ -108,13 +108,13 @@ Host: localhost:8080
 ```http
 HTTP/1.1 200 OK
 Content-Type: application/json
-Content-Length: 136
+Content-Length: 137
 
 {
   "marked" : true,
   "currentStatus" : "PAYING",
   "currentRound" : 1,
-  "expiresAt" : "2026-10-28T14:05:31.62",
+  "expiresAt" : "2026-10-29T08:55:39.086",
   "expired" : false
 }
 ```
@@ -134,7 +134,7 @@ Content-Length: 136
 **요청**
 
 ```http
-POST /reservations/20261028-000004-67416/paying/1/revert HTTP/1.1
+POST /reservations/20261028-000709-88583/paying/1/revert HTTP/1.1
 Host: localhost:8080
 
 ```
@@ -167,7 +167,7 @@ Content-Length: 23
 **요청**
 
 ```http
-GET /reservations/20261028-000003-9666 HTTP/1.1
+GET /reservations/20261028-000708-97166 HTTP/1.1
 Host: localhost:8080
 
 ```
@@ -186,7 +186,7 @@ Content-Length: 111
 {
   "status" : "PAYING",
   "paymentRound" : 2,
-  "expiresAt" : "2026-10-28T14:05:31.659",
+  "expiresAt" : "2026-10-29T08:55:39.109",
   "expired" : false
 }
 ```
@@ -205,7 +205,7 @@ Content-Length: 111
 **요청**
 
 ```http
-PUT /admin/stocks/500001/blocked-regions/SEOUL HTTP/1.1
+PUT /admin/stocks/500013/blocked-regions/SEOUL HTTP/1.1
 Host: localhost:8080
 
 ```
@@ -229,7 +229,7 @@ HTTP/1.1 204 No Content
 **요청**
 
 ```http
-PUT /admin/stocks/500005/slot-mode/spread HTTP/1.1
+PUT /admin/stocks/500017/slot-mode/spread HTTP/1.1
 Host: localhost:8080
 
 ```
@@ -265,10 +265,10 @@ Content-Type: application/json
 Content-Length: 114
 
 [ {
-  "productId" : 500004,
+  "productId" : 500016,
   "leftSide" : 10,
   "rightSide" : 12,
-  "firstSeenAt" : "2026-10-28T13:44:31.518"
+  "firstSeenAt" : "2026-10-29T08:34:39.043"
 } ]
 ```
 
@@ -286,7 +286,7 @@ Content-Length: 114
 **요청**
 
 ```http
-POST /admin/stocks/500004/corrections HTTP/1.1
+POST /admin/stocks/500016/corrections HTTP/1.1
 Content-Type: application/json;charset=UTF-8
 Content-Length: 17
 Host: localhost:8080

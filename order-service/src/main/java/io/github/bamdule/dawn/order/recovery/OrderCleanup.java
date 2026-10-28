@@ -9,7 +9,9 @@ import io.github.bamdule.dawn.order.client.SealOutcome;
 import io.github.bamdule.dawn.order.store.OrderCompletion;
 import io.github.bamdule.dawn.order.store.OrderRepository;
 import io.github.bamdule.dawn.order.store.OrderRepository.ExpiredPending;
+import io.github.bamdule.dawn.order.store.OrderRepository.PageCursor;
 import io.github.bamdule.dawn.order.store.OrderRepository.StuckAttempt;
+import java.util.List;
 import java.util.Optional;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
@@ -46,15 +48,21 @@ public class OrderCleanup {
     // 한 건의 예상 못 한 오류가 나머지 주문을 막지 않게 건마다 따로 잡는다.
     // 1분 넘은 시도는 그 회차의 봉인을 요청한다. 봉인되면 늦게 온 승인 요청도 그 회차를 열지 못한다
     public void resolveStuckAttempts() {
-        for (StuckAttempt stuckAttempt : orderRepository.findStuckAttempts(BATCH_LIMIT)) {
-            try {
-                resolve(stuckAttempt);
-            } catch (RestClientException restClientException) {
-                log.warn("정리 배치 시도 확인 실패 (orderNo={}, paymentRound={})",
-                        stuckAttempt.orderNo(), stuckAttempt.paymentRound());
-            } catch (RuntimeException runtimeException) {
-                log.error("정리 배치 시도 처리 오류 (orderNo={})", stuckAttempt.orderNo(), runtimeException);
-            }
+        List<StuckAttempt> page = orderRepository.findStuckAttempts(PageCursor.FIRST, BATCH_LIMIT);
+        while (!page.isEmpty()) {
+            page.forEach(this::resolveSafely);
+            page = orderRepository.findStuckAttempts(page.getLast().cursor(), BATCH_LIMIT);
+        }
+    }
+
+    private void resolveSafely(StuckAttempt stuckAttempt) {
+        try {
+            resolve(stuckAttempt);
+        } catch (RestClientException restClientException) {
+            log.warn("정리 배치 시도 확인 실패 (orderNo={}, paymentRound={})",
+                    stuckAttempt.orderNo(), stuckAttempt.paymentRound());
+        } catch (RuntimeException runtimeException) {
+            log.error("정리 배치 시도 처리 오류 (orderNo={})", stuckAttempt.orderNo(), runtimeException);
         }
     }
 
@@ -80,14 +88,20 @@ public class OrderCleanup {
 
     // 시도가 IDLE 이면 열려 있는 회차가 없다. 예약이 PAYING 이 아니면 새 회차도 열리지 않아 닫아도 된다
     public void closeExpiredPending() {
-        for (ExpiredPending expiredPending : orderRepository.findExpiredIdlePending(BATCH_LIMIT)) {
-            try {
-                close(expiredPending);
-            } catch (RestClientException restClientException) {
-                log.warn("정리 배치 예약 확인 실패 (orderNo={})", expiredPending.orderNo());
-            } catch (RuntimeException runtimeException) {
-                log.error("정리 배치 주문 처리 오류 (orderNo={})", expiredPending.orderNo(), runtimeException);
-            }
+        List<ExpiredPending> page = orderRepository.findExpiredIdlePending(PageCursor.FIRST, BATCH_LIMIT);
+        while (!page.isEmpty()) {
+            page.forEach(this::closeSafely);
+            page = orderRepository.findExpiredIdlePending(page.getLast().cursor(), BATCH_LIMIT);
+        }
+    }
+
+    private void closeSafely(ExpiredPending expiredPending) {
+        try {
+            close(expiredPending);
+        } catch (RestClientException restClientException) {
+            log.warn("정리 배치 예약 확인 실패 (orderNo={})", expiredPending.orderNo());
+        } catch (RuntimeException runtimeException) {
+            log.error("정리 배치 주문 처리 오류 (orderNo={})", expiredPending.orderNo(), runtimeException);
         }
     }
 

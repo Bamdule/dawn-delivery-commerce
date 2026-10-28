@@ -170,23 +170,27 @@ public class ReservationRepository {
                 .update();
     }
 
-    public List<ReservationRow> findExpiredHeld(int limit) {
+    // 한 주기 안에서 키 순서로 끝까지 읽는다. 풀지 못해 남는 행이 있어도 같은 행을 다시 읽지 않는다
+    public List<ReservationRow> findExpiredHeld(String afterReservationId, int limit) {
         return jdbcClient.sql("""
                 SELECT reservation_id, order_no, product_id, quantity, cancelled_quantity, status, payment_round, expires_at
-                  FROM stock_reservation WHERE status = 'HELD' AND expires_at <= NOW(3)
-                 ORDER BY expires_at LIMIT :limit
+                  FROM stock_reservation WHERE status = 'HELD' AND expires_at <= NOW(3) AND reservation_id > :after
+                 ORDER BY reservation_id LIMIT :limit
                 """)
+                .param("after", afterReservationId)
                 .param("limit", limit)
                 .query(ReservationRow.class)
                 .list();
     }
 
-    public List<ExpiredPayingOrder> findExpiredPayingOrders(int limit) {
+    // 결과를 모르는 결제의 예약은 봉인되지 않아 남는다. 키 순서로 읽어 그 뒤의 주문까지 한 주기에 닿는다
+    public List<ExpiredPayingOrder> findExpiredPayingOrders(String afterOrderNo, int limit) {
         return jdbcClient.sql("""
                 SELECT order_no, MIN(payment_round) AS payment_round
-                  FROM stock_reservation WHERE status = 'PAYING' AND expires_at <= NOW(3)
-                 GROUP BY order_no ORDER BY MIN(expires_at) LIMIT :limit
+                  FROM stock_reservation WHERE status = 'PAYING' AND expires_at <= NOW(3) AND order_no > :after
+                 GROUP BY order_no ORDER BY order_no LIMIT :limit
                 """)
+                .param("after", afterOrderNo)
                 .param("limit", limit)
                 .query(ExpiredPayingOrder.class)
                 .list();

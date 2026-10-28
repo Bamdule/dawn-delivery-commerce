@@ -197,10 +197,15 @@ class ReservationIntegrationTest {
         String sealedOrder = paying(sealedProduct);
         String unknownOrder = paying(unknownProduct);
         String requestedOrder = paying(requestedProduct);
+        long failingProduct = InventoryFixture.newProduct(jdbcClient, 1, 10);
+        String failingOrder = paying(failingProduct);
         given(paymentRoundSealer.seal(anyString(), anyInt())).willAnswer(invocation -> {
             String orderNo = invocation.getArgument(0);
             if (orderNo.equals(sealedOrder)) {
                 return SealOutcome.SEALED;
+            }
+            if (orderNo.equals(failingOrder)) {
+                throw new IllegalStateException("결제 서비스 응답 없음");
             }
             return orderNo.equals(unknownOrder) ? SealOutcome.UNKNOWN : SealOutcome.REQUESTED;
         });
@@ -211,6 +216,8 @@ class ReservationIntegrationTest {
         assertThat(InventoryFixture.quantityOf(jdbcClient, sealedProduct)).isEqualTo(1);
         assertThat(InventoryFixture.statusOf(jdbcClient, unknownOrder, unknownProduct)).isEqualTo("PAYING");
         assertThat(InventoryFixture.statusOf(jdbcClient, requestedOrder, requestedProduct)).isEqualTo("PAYING");
+        assertThat(InventoryFixture.statusOf(jdbcClient, failingOrder, failingProduct))
+                .as("봉인 요청이 실패한 주문만 남고 나머지는 그대로 처리한다").isEqualTo("PAYING");
     }
 
     @Test

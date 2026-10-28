@@ -2,6 +2,7 @@ package io.github.bamdule.dawn.inventory.reservation;
 
 import io.github.bamdule.dawn.inventory.reservation.ReservationRepository.ExpiredPayingOrder;
 import java.time.Instant;
+import java.util.List;
 import java.util.concurrent.atomic.AtomicReference;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
@@ -14,6 +15,7 @@ public class ReservationExpiryJob {
 
     private static final Logger log = LoggerFactory.getLogger(ReservationExpiryJob.class);
     private static final int BATCH_LIMIT = 500;
+    private static final String FIRST_KEY = "";
 
     private final ReservationRepository reservationRepository;
     private final ReservationLifecycle reservationLifecycle;
@@ -29,11 +31,27 @@ public class ReservationExpiryJob {
 
     @Scheduled(fixedDelayString = "${dawn.reservation.expiry-interval:1m}")
     public void run() {
-        reservationRepository.findExpiredHeld(BATCH_LIMIT).forEach(reservationLifecycle::releaseExpiredHeld);
-        for (ExpiredPayingOrder expiredPayingOrder : reservationRepository.findExpiredPayingOrders(BATCH_LIMIT)) {
-            handleExpiredPaying(expiredPayingOrder);
+        List<ReservationRow> held = reservationRepository.findExpiredHeld(FIRST_KEY, BATCH_LIMIT);
+        while (!held.isEmpty()) {
+            held.forEach(reservationLifecycle::releaseExpiredHeld);
+            held = reservationRepository.findExpiredHeld(held.getLast().reservationId(), BATCH_LIMIT);
+        }
+        List<ExpiredPayingOrder> paying = reservationRepository.findExpiredPayingOrders(FIRST_KEY, BATCH_LIMIT);
+        while (!paying.isEmpty()) {
+            paying.forEach(this::handleExpiredPayingSafely);
+            paying = reservationRepository.findExpiredPayingOrders(paying.getLast().orderNo(), BATCH_LIMIT);
         }
         lastCompletedAt.set(Instant.now());
+    }
+
+    // 결제 서비스가 답하지 않는 주문 하나가 나머지 주문의 만료를 막지 않게 한다
+    private void handleExpiredPayingSafely(ExpiredPayingOrder expiredPayingOrder) {
+        try {
+            handleExpiredPaying(expiredPayingOrder);
+        } catch (RuntimeException exception) {
+            log.warn("만료 예약의 회차 봉인 실패 (orderNo={}, paymentRound={})",
+                    expiredPayingOrder.orderNo(), expiredPayingOrder.paymentRound());
+        }
     }
 
     private void handleExpiredPaying(ExpiredPayingOrder expiredPayingOrder) {

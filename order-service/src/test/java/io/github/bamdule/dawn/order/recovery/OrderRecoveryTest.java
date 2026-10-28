@@ -26,6 +26,7 @@ import io.github.bamdule.dawn.order.store.NewOrder;
 import io.github.bamdule.dawn.order.store.OrderRow;
 import java.time.Instant;
 import java.time.LocalDateTime;
+import java.util.ArrayList;
 import java.util.List;
 import java.util.Map;
 import java.util.Optional;
@@ -76,6 +77,57 @@ class OrderRecoveryTest extends OrderIntegrationTest {
         assertThat(order(orderNo).paidRound()).isEqualTo(1);
         assertThat(outboxTypes(orderNo)).containsExactly("PAID");
         assertThat(refundKeys(orderNo)).isEmpty();
+    }
+
+    @Test
+    void 실패_이벤트가_오면_정리_배치를_기다리지_않고_예약을_되돌려_시도를_끝낸다() {
+        String orderNo = savePending();
+        orderRepository.saveReservationExpiry(orderNo, LocalDateTime.now().plusMinutes(10));
+        orderRepository.startAttempt(orderNo, 0);
+
+        paymentEventConsumer.handle(failed(orderNo, 2));
+        assertThat(order(orderNo).paymentAttempt()).as("다른 회차의 실패는 이 시도와 무관하다").isEqualTo(PaymentAttempt.IN_PROGRESS);
+
+        paymentEventConsumer.handle(failed(orderNo, 1));
+
+        verify(inventoryClient).revertPaying(orderNo, 1);
+        assertThat(order(orderNo).paymentAttempt()).isEqualTo(PaymentAttempt.IDLE);
+        assertThat(order(orderNo).status()).as("예약 유지 시간 안에 다음 회차를 받을 수 있다").isEqualTo(OrderStatus.PENDING);
+    }
+
+    @Test
+    void 실패_이벤트의_되돌림이_실패하면_시도를_남겨_정리_배치에_맡긴다() {
+        String orderNo = savePending();
+        orderRepository.saveReservationExpiry(orderNo, LocalDateTime.now().plusMinutes(10));
+        orderRepository.startAttempt(orderNo, 0);
+        when(inventoryClient.revertPaying(orderNo, 1)).thenThrow(new ResourceAccessException("connection reset"));
+
+        paymentEventConsumer.handle(failed(orderNo, 1));
+
+        assertThat(order(orderNo).paymentAttempt()).isEqualTo(PaymentAttempt.IN_PROGRESS);
+    }
+
+    @Test
+    void 확정되지_않은_시도가_한_페이지를_넘게_쌓여도_한_주기에_뒤쪽_주문까지_닫는다() {
+        List<String> stuck = new ArrayList<>();
+        for (int i = 0; i < 501; i++) {
+            String orderNo = savePending();
+            orderRepository.startAttempt(orderNo, 0);
+            stuck.add(orderNo);
+        }
+        jdbcClient.sql("UPDATE orders SET attempt_started_at = NOW(3) - INTERVAL 2 HOUR WHERE order_no IN (:orderNos)")
+                .param("orderNos", stuck).update();
+        when(paymentClient.seal(any(), anyInt())).thenReturn(SealOutcome.UNKNOWN);
+        String last = savePending();
+        orderRepository.startAttempt(last, 0);
+        ageAttempt(last, 61);
+        when(paymentClient.seal(last, 1)).thenReturn(SealOutcome.SEALED);
+
+        orderCleanup.resolveStuckAttempts();
+
+        assertThat(order(last).paymentAttempt()).as("앞의 501건이 결과를 몰라 남아도 뒤의 주문을 끝낸다").isEqualTo(PaymentAttempt.IDLE);
+        jdbcClient.sql("UPDATE orders SET payment_attempt = 'IDLE', attempt_started_at = NULL WHERE order_no IN (:orderNos)")
+                .param("orderNos", stuck).update();
     }
 
     @Test
@@ -251,6 +303,11 @@ class OrderRecoveryTest extends OrderIntegrationTest {
 
     private static ReservationState heldExpired() {
         return new ReservationState(ReservationStatus.HELD, null, LocalDateTime.now().minusSeconds(1), true);
+    }
+
+    private static PaymentEvent failed(String orderNo, int paymentRound) {
+        return new PaymentEvent(UUID.randomUUID(), PaymentEventType.FAILED, orderNo, paymentRound, 10_000, null,
+                false, Instant.now());
     }
 
     private static PaymentEvent approved(String orderNo, int paymentRound, long amount, boolean settlementCorrection) {

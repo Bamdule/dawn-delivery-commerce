@@ -175,34 +175,41 @@ public class OrderRepository {
                 .update();
     }
 
-    public List<StuckAttempt> findStuckAttempts(int limit) {
+    // (시각, id) 다음부터 읽는다. 아직 확정되지 않아 남는 행이 앞을 막아도 그 뒤의 행까지 한 주기에 닿는다
+    public List<StuckAttempt> findStuckAttempts(PageCursor after, int limit) {
         return jdbcClient.sql("""
-                SELECT order_no, payment_round,
+                SELECT id, order_no, payment_round, attempt_started_at AS sort_at,
                        attempt_started_at < NOW(3) - INTERVAL :overdueMinutes MINUTE AS overdue
                   FROM orders
                  WHERE payment_attempt = 'IN_PROGRESS'
                    AND attempt_started_at < NOW(3) - INTERVAL :stuckSeconds SECOND
-                 ORDER BY attempt_started_at
+                   AND (attempt_started_at > :afterAt OR (attempt_started_at = :afterAt AND id > :afterId))
+                 ORDER BY attempt_started_at, id
                  LIMIT :limit
                 """)
                 .param("stuckSeconds", STUCK_ATTEMPT_SECONDS)
                 .param("overdueMinutes", OVERDUE_MINUTES)
+                .param("afterAt", after.sortAt())
+                .param("afterId", after.id())
                 .param("limit", limit)
                 .query(StuckAttempt.class)
                 .list();
     }
 
-    public List<ExpiredPending> findExpiredIdlePending(int limit) {
+    public List<ExpiredPending> findExpiredIdlePending(PageCursor after, int limit) {
         return jdbcClient.sql("""
-                SELECT order_no, created_at < NOW(3) - INTERVAL :overdueMinutes MINUTE AS overdue
+                SELECT id, order_no, created_at AS sort_at, created_at < NOW(3) - INTERVAL :overdueMinutes MINUTE AS overdue
                   FROM orders
                  WHERE status = 'PENDING' AND payment_attempt = 'IDLE'
                    AND COALESCE(reservation_expires_at, created_at + INTERVAL :maxHoldMinutes MINUTE) < NOW(3)
-                 ORDER BY created_at
+                   AND (created_at > :afterAt OR (created_at = :afterAt AND id > :afterId))
+                 ORDER BY created_at, id
                  LIMIT :limit
                 """)
                 .param("maxHoldMinutes", MAX_HOLD_MINUTES)
                 .param("overdueMinutes", OVERDUE_MINUTES)
+                .param("afterAt", after.sortAt())
+                .param("afterId", after.id())
                 .param("limit", limit)
                 .query(ExpiredPending.class)
                 .list();
@@ -232,10 +239,23 @@ public class OrderRepository {
         return jdbcClient.sql("SELECT NOW(3)").query(LocalDateTime.class).single();
     }
 
-    public record StuckAttempt(String orderNo, int paymentRound, boolean overdue) {
+    public record StuckAttempt(long id, String orderNo, int paymentRound, LocalDateTime sortAt, boolean overdue) {
+
+        public PageCursor cursor() {
+            return new PageCursor(sortAt, id);
+        }
     }
 
-    public record ExpiredPending(String orderNo, boolean overdue) {
+    public record ExpiredPending(long id, String orderNo, LocalDateTime sortAt, boolean overdue) {
+
+        public PageCursor cursor() {
+            return new PageCursor(sortAt, id);
+        }
+    }
+
+    public record PageCursor(LocalDateTime sortAt, long id) {
+
+        public static final PageCursor FIRST = new PageCursor(LocalDateTime.of(2000, 1, 1, 0, 0), 0);
     }
 
     public record PaidOrder(long id, String orderNo, LocalDateTime paidAt) {

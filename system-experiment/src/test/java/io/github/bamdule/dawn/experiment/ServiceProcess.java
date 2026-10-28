@@ -1,6 +1,7 @@
 package io.github.bamdule.dawn.experiment;
 
 import java.io.IOException;
+import java.io.UncheckedIOException;
 import java.net.ServerSocket;
 import java.net.URI;
 import java.net.http.HttpClient;
@@ -8,6 +9,7 @@ import java.net.http.HttpRequest;
 import java.net.http.HttpResponse;
 import java.nio.file.Files;
 import java.nio.file.Path;
+import java.nio.file.StandardCopyOption;
 import java.time.Duration;
 import java.util.ArrayList;
 import java.util.List;
@@ -26,10 +28,21 @@ final class ServiceProcess {
 
     ServiceProcess(String name, String jarProperty, int port, List<String> arguments) {
         this.name = name;
-        this.jar = Path.of(System.getProperty(jarProperty));
+        this.jar = copyJar(name, Path.of(System.getProperty(jarProperty)));
         this.port = port;
         this.arguments = List.copyOf(arguments);
         this.log = Path.of("build", "experiment-results", name + ".log");
+    }
+
+    // 실행 중에 빌드가 jar 를 덮어쓰면 아직 읽지 않은 클래스를 찾지 못해 요청 스레드가 죽는다. 복사본으로 띄운다
+    private static Path copyJar(String name, Path original) {
+        try {
+            Path copy = Path.of("build", "experiment-jars", name + ".jar");
+            Files.createDirectories(copy.getParent());
+            return Files.copy(original, copy, StandardCopyOption.REPLACE_EXISTING);
+        } catch (IOException ioException) {
+            throw new UncheckedIOException(ioException);
+        }
     }
 
     static int freePort() throws IOException {

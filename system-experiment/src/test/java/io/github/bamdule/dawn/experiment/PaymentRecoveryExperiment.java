@@ -37,7 +37,7 @@ import tools.jackson.databind.JsonNode;
 import tools.jackson.databind.json.JsonMapper;
 
 // 실험 3. 주문, 재고, 결제, 가짜 대행사를 실제 프로세스로 띄우고 대행사 장애를 섞은 주문을 흘린다.
-// 도중에 주문 서비스를 SIGKILL 로 죽였다 다시 띄운 뒤, 세 서비스와 대행사의 상태가 모두 맞는지 본다 (docs/experiments/03-결제-복구.md)
+// 도중에 결제, 주문, 재고 서비스를 하나씩 SIGKILL 로 죽였다 다시 띄운 뒤, 세 서비스와 대행사의 상태가 모두 맞는지 본다 (docs/experiments/03-결제-복구.md)
 @Tag("experiment")
 class PaymentRecoveryExperiment {
 
@@ -46,9 +46,12 @@ class PaymentRecoveryExperiment {
     private static final int PRODUCTS = 20;
     private static final int INITIAL_STOCK = 1_000;
     private static final long UNIT_PRICE = 10_000;
-    private static final Duration CRASH_AT = Duration.ofSeconds(12);
+    // 세 서비스를 겹치지 않게 하나씩 죽인다. 결제 6초, 주문 14초, 재고 22초에 SIGKILL 하고 6초 뒤 다시 띄운다
+    private static final List<Duration> CRASH_AT = List.of(Duration.ofSeconds(6), Duration.ofSeconds(14), Duration.ofSeconds(22));
     private static final Duration DOWNTIME = Duration.ofSeconds(6);
-    private static final Duration CONVERGENCE_LIMIT = Duration.ofMinutes(8);
+    // 예약 응답을 받기 전에 주문 서비스가 죽으면 만료 시각을 몰라, 정리 배치가 주문 시각에 최대 유지 시간(10분)을 더해 기다린다
+    private static final Duration CONVERGENCE_LIMIT = Duration.ofMinutes(13);
+    private static final Duration HTTP_TIMEOUT = Duration.ofSeconds(10);
     private static final long PRODUCT_BASE = 1_000;
 
     private final HttpClient httpClient = HttpClient.newBuilder().connectTimeout(Duration.ofSeconds(2)).build();
@@ -85,12 +88,13 @@ class PaymentRecoveryExperiment {
                 seedStock(mysql);
                 Map<String, Integer> behaviors = enqueueBehaviors(fakePg);
                 report.line("## 준비");
-                report.line("주문 %d건, 초당 %d건, 상품 %d개(재고 %d, 예약 유지 1분). 주문 서비스는 %d초에 SIGKILL, %d초 뒤 재기동".formatted(
-                        ORDERS, ORDERS_PER_SECOND, PRODUCTS, INITIAL_STOCK, CRASH_AT.toSeconds(), DOWNTIME.toSeconds()));
+                report.line("주문 %d건, 초당 %d건, 상품 %d개(재고 %d, 예약 유지 1분). 결제 %d초, 주문 %d초, 재고 %d초에 SIGKILL, 각각 %d초 뒤 재기동".formatted(
+                        ORDERS, ORDERS_PER_SECOND, PRODUCTS, INITIAL_STOCK, CRASH_AT.get(0).toSeconds(), CRASH_AT.get(1).toSeconds(),
+                        CRASH_AT.get(2).toSeconds(), DOWNTIME.toSeconds()));
                 report.line("대행사 승인 동작 " + behaviors);
 
                 long startedAt = System.nanoTime();
-                runOrders(order, startedAt);
+                runOrders(order, List.of(payment, order, inventory), startedAt);
                 double loadSeconds = (System.nanoTime() - startedAt) / 1e9;
                 double convergedAfter = awaitConvergence(mysql);
 
@@ -109,15 +113,17 @@ class PaymentRecoveryExperiment {
         }
     }
 
-    private void runOrders(ServiceProcess order, long startedAt) throws Exception {
+    private void runOrders(ServiceProcess order, List<ServiceProcess> crashOrder, long startedAt) throws Exception {
         List<Future<?>> clients = new ArrayList<>();
         Random random = new Random(20261028);
         try (ExecutorService executorService = Executors.newVirtualThreadPerTaskExecutor()) {
             Future<?> crash = executorService.submit(() -> {
-                sleepUntil(startedAt, CRASH_AT);
-                order.kill();
-                Thread.sleep(DOWNTIME.toMillis());
-                order.start();
+                for (int index = 0; index < crashOrder.size(); index++) {
+                    sleepUntil(startedAt, CRASH_AT.get(index));
+                    crashOrder.get(index).kill();
+                    Thread.sleep(DOWNTIME.toMillis());
+                    crashOrder.get(index).start();
+                }
                 return null;
             });
             for (int index = 0; index < ORDERS; index++) {
@@ -191,7 +197,8 @@ class PaymentRecoveryExperiment {
                 default -> 0;
             };
             httpClient.send(HttpRequest.newBuilder(URI.create(fakePg.baseUrl() + "/fake/behaviors/approve?behavior=" + behavior
-                    + "&delayMillis=" + delayMillis)).POST(HttpRequest.BodyPublishers.noBody()).build(), HttpResponse.BodyHandlers.discarding());
+                    + "&delayMillis=" + delayMillis)).timeout(HTTP_TIMEOUT).POST(HttpRequest.BodyPublishers.noBody()).build(),
+                    HttpResponse.BodyHandlers.discarding());
         }
         return mix;
     }
@@ -219,7 +226,8 @@ class PaymentRecoveryExperiment {
     // PAID 주문은 예약이 확정되고, 그 밖의 주문은 예약이 풀려야 한다. 상품마다 처음 재고 = 남은 재고 + 확정 수량이어야 한다
     private Map<String, Object> check(MySQLContainer mysql, ServiceProcess fakePg, ExperimentReport report) throws Exception {
         JsonNode settlement = jsonMapper.readTree(httpClient.send(HttpRequest.newBuilder(URI.create(
-                fakePg.baseUrl() + "/pg/settlements?date=" + LocalDate.now())).build(), HttpResponse.BodyHandlers.ofString()).body());
+                fakePg.baseUrl() + "/pg/settlements?date=" + LocalDate.now(java.time.ZoneId.of("Asia/Seoul")))).timeout(HTTP_TIMEOUT).build(),
+                HttpResponse.BodyHandlers.ofString()).body());
         Map<String, Long> charged = new HashMap<>();
         Map<String, Integer> approvals = new HashMap<>();
         for (JsonNode approval : settlement.get("approvals")) {

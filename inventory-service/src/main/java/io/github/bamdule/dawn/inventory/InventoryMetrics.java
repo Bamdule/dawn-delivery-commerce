@@ -25,5 +25,7 @@ public class InventoryMetrics {
                 () -> jdbcClient.sql("""
                         SELECT COUNT(*) FROM stock_reservation WHERE status = 'HELD' AND expires_at < NOW(3) - INTERVAL 5 MINUTE
                         """).query(Long.class).single());
+        dbGauges.register("dawn.inventory.reconciliation.mismatch", "10분 간격 두 번 연속 재고 대사가 어긋난 상품. 사람이 보정해야 함", "products",
+                () -> jdbcClient.sql("SELECT COUNT(*) FROM stock_reconciliation WHERE status = 'CONFIRMED'").query(Long.class).single());
     }
 }

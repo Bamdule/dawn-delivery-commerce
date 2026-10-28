@@ -1,5 +1,4 @@
 # 설계 01 "운영 지표" 표와 "수렴 책임" 표의 경보 기준이다. 기준을 바꾸면 설계 표도 함께 고친다.
-# 재고 대사 불일치는 재고 대사 작업(작업 목록 2번)이 아직 없어 규칙이 없다.
 groups:
   - name: messaging
     rules:
@@ -74,6 +73,10 @@ groups:
         expr: dawn_inventory_expiry_idle_seconds > 300 or dawn_inventory_held_expired_overdue_reservations > 0
         annotations:
           summary: 만료 배치 정지. 특가 재고가 묶여 판매 손실
+      - alert: StockReconciliationMismatch
+        expr: dawn_inventory_reconciliation_mismatch_products > 0
+        annotations:
+          summary: 10분 간격 두 번 연속 재고 대사가 어긋남. 판매 가능 재고가 실물과 다름
       - alert: ConfirmOnReleasedReservation
         expr: increase(dawn_inventory_confirm_released_total[1h]) > 0
         annotations:

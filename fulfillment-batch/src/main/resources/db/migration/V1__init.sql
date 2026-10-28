@@ -35,6 +35,7 @@ CREATE TABLE shipment_target_line (
     assigned_cutoff_at DATETIME(3) NULL,       -- 대기 수량이 배정된 회차. 비었으면 목록에 오른 주문만 가져가고, 이월은 값을 그대로 둬 다음 대상 확정이 지난 회차로 가져간다
     PRIMARY KEY (order_no, product_id),
     KEY idx_target_line_cutoff (assigned_cutoff_at),
+    KEY idx_target_line_product (product_id),   -- 재고 대사가 상품마다 출고 전 확정 수량을 센다
     CONSTRAINT ck_target_line_sum CHECK (waiting_qty + shipped_qty + unfilled_qty + exception_qty + cancelled_qty = quantity),
     CONSTRAINT ck_target_line_nonneg CHECK (waiting_qty >= 0 AND shipped_qty >= 0 AND unfilled_qty >= 0 AND exception_qty >= 0 AND cancelled_qty >= 0)
 );

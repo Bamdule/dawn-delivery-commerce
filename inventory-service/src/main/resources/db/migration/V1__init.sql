@@ -73,3 +73,18 @@ CREATE TABLE inbox_event (
     processed_at DATETIME(3) NOT NULL,
     PRIMARY KEY (consumer, event_id)
 );
+
+-- 재고 대사가 어긋난 상품. 한 번 어긋나면 SUSPECTED, 10분 뒤 다시 재서 또 어긋나면 CONFIRMED 로 경보한다.
+-- 대사는 고치지 않고 알리기만 한다. 사람이 보정 API 로 고치면 CORRECTED 다 (docs/design/02 "재고 대사")
+CREATE TABLE stock_reconciliation (
+    id            BIGINT      NOT NULL AUTO_INCREMENT,
+    product_id    BIGINT      NOT NULL,
+    left_side     INT         NOT NULL,   -- 판매 가능 재고 - 부족분 + 잡힌 예약 + 출고 전 확정 수량
+    right_side    INT         NOT NULL,   -- 센터 실물 합
+    status        VARCHAR(20) NOT NULL,   -- SUSPECTED / CONFIRMED / RESOLVED / CORRECTED
+    first_seen_at DATETIME(3) NOT NULL,
+    checked_at    DATETIME(3) NULL,
+    PRIMARY KEY (id),
+    KEY idx_reconciliation_status (status, first_seen_at),
+    KEY idx_reconciliation_product (product_id, status)
+);

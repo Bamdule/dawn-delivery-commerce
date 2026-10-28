@@ -1,0 +1,20 @@
+# 로컬 실행용. 서비스는 호스트에서 돌고 Prometheus 는 컨테이너에서 돈다
+global:
+  scrape_interval: 15s
+  evaluation_interval: 15s
+
+rule_files:
+  - /etc/prometheus/alerts.yml
+
+scrape_configs:
+  - job_name: dawn
+    metrics_path: /actuator/prometheus
+    static_configs:
+      - targets: ["host.docker.internal:8081"]
+        labels: {service: order-service}
+      - targets: ["host.docker.internal:8082"]
+        labels: {service: inventory-service}
+      - targets: ["host.docker.internal:8083"]
+        labels: {service: payment-service}
+      - targets: ["host.docker.internal:8084"]
+        labels: {service: fulfillment-batch}

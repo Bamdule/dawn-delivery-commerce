@@ -3,6 +3,7 @@ package io.github.bamdule.dawn.payment.guard;
 import java.time.Clock;
 import java.time.Duration;
 import java.util.concurrent.Semaphore;
+import java.util.concurrent.atomic.AtomicLong;
 import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.beans.factory.annotation.Value;
 import org.springframework.stereotype.Component;
@@ -15,6 +16,8 @@ public class PgCallGuard {
 
     private final Semaphore permits;
     private final CircuitBreaker circuitBreaker;
+    private final AtomicLong rejectedByLimit = new AtomicLong();
+    private final AtomicLong rejectedByCircuit = new AtomicLong();
 
     @Autowired
     public PgCallGuard(@Value("${dawn.pg.max-concurrent-calls:600}") int maxConcurrentCalls) {
@@ -29,10 +32,12 @@ public class PgCallGuard {
     // 한도를 넘거나 회로가 열려 있으면 기다리지 않고 거절한다. 호출하지 않았으니 결과가 확실한 실패다
     public boolean tryEnter() {
         if (!permits.tryAcquire()) {
+            rejectedByLimit.incrementAndGet();
             return false;
         }
         if (!circuitBreaker.tryAcquirePermission()) {
             permits.release();
+            rejectedByCircuit.incrementAndGet();
             return false;
         }
         return true;
@@ -41,6 +46,15 @@ public class PgCallGuard {
     public void exit(boolean failedOrUnknown, Duration elapsed) {
         permits.release();
         circuitBreaker.record(failedOrUnknown || elapsed.compareTo(SLOW_CALL) > 0);
+    }
+
+    // 1분에 10건 넘게 한도로 거절하면 대행사가 느려진 것이다 (docs/design/01 "운영 지표")
+    public long rejectedByLimit() {
+        return rejectedByLimit.get();
+    }
+
+    public long rejectedByCircuit() {
+        return rejectedByCircuit.get();
     }
 
     public boolean isCircuitOpen() {

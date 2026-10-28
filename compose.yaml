@@ -33,3 +33,14 @@ services:
       KAFKA_NUM_PARTITIONS: 12
     ports:
       - "19092:9092"
+
+  # 지표와 경보 규칙 확인용. docker compose --profile monitoring up 으로 함께 띄운다
+  prometheus:
+    image: prom/prometheus:v3.5.0
+    profiles: ["monitoring"]
+    volumes:
+      - ./infra/prometheus:/etc/prometheus:ro
+    extra_hosts:
+      - "host.docker.internal:host-gateway"
+    ports:
+      - "19090:9090"

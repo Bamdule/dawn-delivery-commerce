@@ -38,7 +38,8 @@ import org.springframework.test.context.bean.override.mockito.MockitoBean;
 
 // 재고와 결제 서비스는 가짜로 두고 주문 DB 는 실제 MySQL 을 쓴다. 주기 작업은 끄고 테스트가 직접 부른다.
 // 하위 클래스가 같은 설정을 써서 스프링 컨텍스트 하나를 함께 쓴다
-@SpringBootTest(properties = {"dawn.order.jobs.enabled=false", "dawn.outbox.relay.enabled=false"})
+@SpringBootTest(properties = {"dawn.order.jobs.enabled=false", "dawn.outbox.relay.enabled=false",
+        "management.defaults.metrics.export.enabled=true", "dawn.metrics.refresh.enabled=false"})
 @Import({MySqlContainers.class, KafkaContainers.class})
 public abstract class OrderIntegrationTest {
 

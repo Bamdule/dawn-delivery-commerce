@@ -1,6 +1,8 @@
 package io.github.bamdule.dawn.order.refund;
 
 import io.github.bamdule.dawn.order.store.OrderRepository;
+import io.micrometer.core.instrument.Counter;
+import io.micrometer.core.instrument.MeterRegistry;
 import java.util.List;
 import java.util.Optional;
 import org.slf4j.Logger;
@@ -16,16 +18,22 @@ public class RefundRequests {
 
     private final RefundRequestRepository refundRequestRepository;
     private final OrderRepository orderRepository;
+    private final Counter orphanApprovals;
 
-    public RefundRequests(RefundRequestRepository refundRequestRepository, OrderRepository orderRepository) {
+    public RefundRequests(RefundRequestRepository refundRequestRepository, OrderRepository orderRepository,
+                          MeterRegistry meterRegistry) {
         this.refundRequestRepository = refundRequestRepository;
         this.orderRepository = orderRepository;
+        this.orphanApprovals = Counter.builder("dawn.order.orphan.approval")
+                .description("실패나 취소된 주문, 다른 회차에 온 승인. 설계의 가정이 깨진 것이라 1건이면 경보")
+                .register(meterRegistry);
     }
 
     public void requestOrphan(String orderNo, int paymentRound, long amount) {
         if (refundRequestRepository.insert(orderNo, RefundKeys.orphan(orderNo, paymentRound), paymentRound, amount,
                 RefundReason.ORPHAN_APPROVAL)) {
             log.error("주문이 쓰지 않은 승인 환불 요청 (orderNo={}, paymentRound={}, amount={})", orderNo, paymentRound, amount);
+            orphanApprovals.increment();
         }
     }
 

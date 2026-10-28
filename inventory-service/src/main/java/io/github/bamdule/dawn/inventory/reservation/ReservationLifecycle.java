@@ -1,6 +1,8 @@
 package io.github.bamdule.dawn.inventory.reservation;
 
 import io.github.bamdule.dawn.inventory.stock.SellableStock;
+import io.micrometer.core.instrument.Counter;
+import io.micrometer.core.instrument.MeterRegistry;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 import org.springframework.stereotype.Service;
@@ -14,10 +16,15 @@ public class ReservationLifecycle {
 
     private final ReservationRepository reservationRepository;
     private final SellableStock sellableStock;
+    private final Counter confirmOnReleased;
 
-    public ReservationLifecycle(ReservationRepository reservationRepository, SellableStock sellableStock) {
+    public ReservationLifecycle(ReservationRepository reservationRepository, SellableStock sellableStock,
+                                MeterRegistry meterRegistry) {
         this.reservationRepository = reservationRepository;
         this.sellableStock = sellableStock;
+        this.confirmOnReleased = Counter.builder("dawn.inventory.confirm.released")
+                .description("풀린 예약에 온 확정 시도. 결제한 주문에 재고가 없다는 뜻이라 1건이면 경보")
+                .register(meterRegistry);
     }
 
     // PAID 를 받으면 PAYING 을 확정한다. 0행이면 다시 읽어, 결제한 주문에 재고가 없는 경우만 경보를 낸다
@@ -30,6 +37,7 @@ public class ReservationLifecycle {
             if (reservationRow.status() == ReservationStatus.RELEASED || reservationRow.status() == ReservationStatus.HELD) {
                 log.error("풀린 예약에 온 확정 시도 (orderNo={}, productId={}, status={})",
                         orderNo, reservationRow.productId(), reservationRow.status());
+                confirmOnReleased.increment();
             }
         }
     }

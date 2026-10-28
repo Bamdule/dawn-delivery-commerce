@@ -1,0 +1,61 @@
+# promtool test rules alerts-test.yml 로 돌린다. 시각 기준 경보만 시험한다.
+# 시험 시계는 0초에서 시작하고, 가장 최근 회차의 마감 시각을 0초(전날 23:00)로 둔다
+rule_files:
+  - alerts.yml
+
+evaluation_interval: 1m
+
+tests:
+  - name: 오늘 회차가 23:15 까지 시작하지 않으면 울린다
+    interval: 1m
+    input_series:
+      - series: dawn_fulfillment_run_latest_cutoff_seconds
+        values: "0+0x1500"
+      - series: dawn_fulfillment_run_latest_stage
+        values: "5+0x1500"
+    alert_rule_test:
+      - eval_time: 1450m
+        alertname: ShipmentJobNotStarted
+        exp_alerts: []
+      - eval_time: 1456m
+        alertname: ShipmentJobNotStarted
+        exp_alerts:
+          - exp_annotations:
+              summary: 23:15 까지 오늘 회차가 시작하지 않음
+
+  - name: 00:30 에 ALLOCATED 전이면 울리고 ALLOCATED 면 울리지 않는다
+    interval: 1m
+    input_series:
+      - series: dawn_fulfillment_run_latest_cutoff_seconds
+        values: "0+0x200"
+      - series: dawn_fulfillment_run_latest_stage
+        values: "1+0x95 2+0x100"
+    alert_rule_test:
+      - eval_time: 89m
+        alertname: ShipmentNotAllocated
+        exp_alerts: []
+      - eval_time: 91m
+        alertname: ShipmentNotAllocated
+        exp_alerts:
+          - exp_annotations:
+              summary: 00:30 까지 ALLOCATED 가 아님. 01:00 완료 목표를 놓칠 위험
+      - eval_time: 100m
+        alertname: ShipmentNotAllocated
+        exp_alerts: []
+
+  - name: 00:50 에 SHIPMENT_CREATED 전이면 울린다
+    interval: 1m
+    input_series:
+      - series: dawn_fulfillment_run_latest_cutoff_seconds
+        values: "0+0x200"
+      - series: dawn_fulfillment_run_latest_stage
+        values: "3+0x200"
+    alert_rule_test:
+      - eval_time: 109m
+        alertname: ShipmentNotCreated
+        exp_alerts: []
+      - eval_time: 111m
+        alertname: ShipmentNotCreated
+        exp_alerts:
+          - exp_annotations:
+              summary: 00:50 까지 SHIPMENT_CREATED 가 아님

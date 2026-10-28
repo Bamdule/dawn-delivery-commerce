@@ -6,6 +6,7 @@ plugins {
 dependencies {
     api("org.springframework.boot:spring-boot-starter-jdbc")
     api("org.springframework.boot:spring-boot-starter-kafka")
+    api("io.micrometer:micrometer-core")
 
     testImplementation("org.springframework.boot:spring-boot-starter-test")
     testRuntimeOnly("com.mysql:mysql-connector-j")

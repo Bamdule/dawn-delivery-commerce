@@ -1,6 +1,9 @@
 package io.github.bamdule.dawn.messaging;
 
+import io.micrometer.core.instrument.MeterRegistry;
 import org.apache.kafka.clients.producer.ProducerConfig;
+import org.springframework.beans.factory.ObjectProvider;
+import org.springframework.beans.factory.SmartInitializingSingleton;
 import org.springframework.boot.autoconfigure.AutoConfiguration;
 import org.springframework.boot.autoconfigure.condition.ConditionalOnBean;
 import org.springframework.boot.autoconfigure.condition.ConditionalOnMissingBean;
@@ -18,7 +21,8 @@ import org.springframework.transaction.support.TransactionTemplate;
 @AutoConfiguration(afterName = {
         "org.springframework.boot.kafka.autoconfigure.KafkaAutoConfiguration",
         "org.springframework.boot.jdbc.autoconfigure.JdbcClientAutoConfiguration",
-        "org.springframework.boot.transaction.autoconfigure.TransactionAutoConfiguration"})
+        "org.springframework.boot.transaction.autoconfigure.TransactionAutoConfiguration",
+        "org.springframework.boot.micrometer.metrics.autoconfigure.CompositeMeterRegistryAutoConfiguration"})
 @EnableScheduling
 @EnableConfigurationProperties(OutboxProperties.class)
 public class MessagingAutoConfiguration {
@@ -82,7 +86,30 @@ public class MessagingAutoConfiguration {
     @Bean
     @ConditionalOnMissingBean
     @ConditionalOnBean(KafkaTemplate.class)
-    public DefaultErrorHandler deadLetterErrorHandler(KafkaTemplate<String, String> kafkaTemplate) {
-        return ConsumerErrorHandling.deadLetterErrorHandler(kafkaTemplate);
+    public DefaultErrorHandler deadLetterErrorHandler(KafkaTemplate<String, String> kafkaTemplate,
+                                                      ObjectProvider<MeterRegistry> meterRegistry) {
+        return ConsumerErrorHandling.deadLetterErrorHandler(kafkaTemplate, meterRegistry.getIfAvailable());
+    }
+
+    @Bean
+    @ConditionalOnMissingBean
+    @ConditionalOnBean(MeterRegistry.class)
+    public DbGauges dbGauges(MeterRegistry meterRegistry) {
+        return new DbGauges(meterRegistry);
+    }
+
+    @Bean
+    @ConditionalOnBean(DbGauges.class)
+    @ConditionalOnProperty(prefix = "dawn.metrics.refresh", name = "enabled", havingValue = "true", matchIfMissing = true)
+    public DbGaugeRefresher dbGaugeRefresher(DbGauges dbGauges) {
+        return new DbGaugeRefresher(dbGauges);
+    }
+
+    // 재고 서비스는 이벤트를 내지 않아 아웃박스 표가 없다. 그런 서비스는 이 속성을 꺼서 지표를 만들지 않는다
+    @Bean
+    @ConditionalOnBean(DbGauges.class)
+    @ConditionalOnProperty(prefix = "dawn.outbox.metrics", name = "enabled", havingValue = "true", matchIfMissing = true)
+    public SmartInitializingSingleton outboxMetrics(DbGauges dbGauges, JdbcClient jdbcClient, OutboxProperties outboxProperties) {
+        return () -> OutboxMetrics.register(dbGauges, jdbcClient, outboxProperties);
     }
 }

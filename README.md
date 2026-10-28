@@ -83,7 +83,9 @@ docker compose up -d --wait        # MySQL 13306, Kafka 19092
 java -jar order-service/build/libs/order-service-0.0.1-SNAPSHOT.jar
 ```
 
-각 서비스는 기동할 때 Flyway로 자기 DB의 테이블을 만듭니다. 상태는 `/actuator/health` 로 확인합니다.
+각 서비스는 기동할 때 Flyway로 자기 DB의 테이블을 만듭니다. 상태는 `/actuator/health`, 운영 지표는 `/actuator/prometheus` 로 확인합니다.
+
+지표와 경보 규칙을 함께 보려면 `docker compose --profile monitoring up -d` 로 Prometheus(19090)를 띄웁니다. 경보 규칙의 시각 계산은 `promtool test rules infra/prometheus/alerts-test.yml` 로 시험합니다.
 
 ## 진행 상태
 
@@ -96,7 +98,8 @@ java -jar order-service/build/libs/order-service-0.0.1-SNAPSHOT.jar
 | 4. 결제 (회차, 봉인, 미결 조회, 환불, 정산 대사) | 완료 |
 | 5. 주문 (동기 흐름, 정리 배치, 취소와 환불) | 완료 |
 | 6. 풀필먼트 출고 배치 (대상 확정, 할당, 출고 지시, 검증, 관리 API) | 완료 |
-| 7~8. 운영 지표, 실험 기록 | 다음 |
+| 7. 운영 지표 (Prometheus 지표와 경보 규칙) | 완료. 재고 대사 지표는 대사 작업과 함께 |
+| 8. 실험 기록 | 다음 |
 
 ## 기술
 

@@ -1,0 +1,116 @@
+# 설계 01 "운영 지표" 표와 "수렴 책임" 표의 경보 기준이다. 기준을 바꾸면 설계 표도 함께 고친다.
+# 재고 대사 불일치는 재고 대사 작업(작업 목록 2번)이 아직 없어 규칙이 없다.
+groups:
+  - name: messaging
+    rules:
+      - alert: OutboxPendingTooOld
+        expr: dawn_outbox_pending_oldest_age_seconds > 30
+        annotations:
+          summary: 릴레이가 멈췄거나 브로커가 느림
+      - alert: OutboxEventStuck
+        expr: dawn_outbox_pending_stuck_events > 0
+        annotations:
+          summary: 10번 넘게 실패한 이벤트. 원인을 고쳐 다시 보내거나 격리해 같은 키의 뒤 이벤트를 풀어야 함
+      - alert: ConsumerLagHigh
+        # 컨슈머 하나가 초당 100건을 처리하므로 1분 분량은 6,000건이다 (설계 03 "토픽 파티션")
+        expr: kafka_consumer_fetch_manager_records_lag_max > 6000
+        for: 1m
+        annotations:
+          summary: 받는 쪽이 피크를 못 따라감
+      - alert: DeadLetterArrived
+        expr: increase(dawn_consumer_dead_letter_total[5m]) > 0
+        annotations:
+          summary: 처리 실패 토픽에 메시지가 쌓임. 코드나 데이터 문제라 사람이 봐야 함
+
+  - name: payment
+    rules:
+      - alert: PaymentRequestedOverdue
+        expr: dawn_payment_requested_overdue_payments > 0
+        annotations:
+          summary: 10분 넘은 REQUESTED 결제. 대행사 장애나 조회 배치 정지
+      - alert: PaymentNeedsHuman
+        expr: dawn_payment_unknown_payments > 0 or dawn_payment_refund_attention_refunds > 0
+        annotations:
+          summary: UNKNOWN 결제나 UNKNOWN, FAILED 환불. 사람이 대행사에 확인해야 함
+      - alert: PaymentRefundSlow
+        expr: dawn_payment_refund_requested_overdue_refunds > 0
+        annotations:
+          summary: 1시간 넘은 REQUESTED 환불. 대행사 환불 지연
+      - alert: PgRejectedByLimit
+        expr: increase(dawn_payment_pg_rejected_total{reason="limit"}[1m]) > 10
+        annotations:
+          summary: 동시 호출 한도 초과로 1분에 10건 넘게 거절. 대행사가 느려짐
+      - alert: SettlementMismatch
+        expr: dawn_payment_settlement_mismatch_mismatches > 0
+        annotations:
+          summary: 정산 대사의 어긋남. 사람이 확인해야 함
+
+  - name: order
+    rules:
+      - alert: OrderPendingOverdue
+        expr: dawn_order_pending_overdue_orders > 0
+        annotations:
+          summary: 15분 넘은 PENDING 주문. 결제 결과가 주문에 반영되지 않음
+      - alert: PaymentAttemptOverdue
+        expr: dawn_order_attempt_overdue_attempts > 0
+        annotations:
+          summary: 15분 넘은 IN_PROGRESS 결제 시도. 정리 배치 정지나 대행사 장애
+      - alert: OrderRefundStalled
+        expr: dawn_order_refund_unaccepted_refunds > 0 or dawn_order_refund_accepted_overdue_refunds > 0
+        annotations:
+          summary: 10분 넘게 접수 안 된 환불이나 2시간 넘은 ACCEPTED 환불. 환불 배치 정지나 결제 서비스 장애
+      - alert: OrderRefundNeedsHuman
+        expr: dawn_order_refund_attention_refunds > 0
+        annotations:
+          summary: 접수가 거절됐거나 실패한 환불. 사람이 금액을 확인해 다시 요청해야 함
+      - alert: OrphanApproval
+        expr: increase(dawn_order_orphan_approval_total[1h]) > 0
+        annotations:
+          summary: 실패나 취소된 주문, 다른 회차에 온 승인. 환불은 자동, 원인은 사람이 봄
+
+  - name: inventory
+    rules:
+      - alert: ExpiryJobStalled
+        expr: dawn_inventory_expiry_idle_seconds > 300 or dawn_inventory_held_expired_overdue_reservations > 0
+        annotations:
+          summary: 만료 배치 정지. 특가 재고가 묶여 판매 손실
+      - alert: ConfirmOnReleasedReservation
+        expr: increase(dawn_inventory_confirm_released_total[1h]) > 0
+        annotations:
+          summary: 풀린 예약에 온 확정 시도. 결제한 주문에 재고가 없음
+
+  - name: fulfillment
+    rules:
+      # 마감 시각은 23:00 이다. 가장 최근 회차의 마감 시각에서 지난 시간으로 시각 기준을 센다
+      - alert: ShipmentJobNotStarted
+        expr: time() - dawn_fulfillment_run_latest_cutoff_seconds > 86400 + 900
+        annotations:
+          summary: 23:15 까지 오늘 회차가 시작하지 않음
+      - alert: ShipmentNotAllocated
+        expr: (time() - dawn_fulfillment_run_latest_cutoff_seconds > 5400) and (time() - dawn_fulfillment_run_latest_cutoff_seconds < 86400) and dawn_fulfillment_run_latest_stage < 2
+        annotations:
+          summary: 00:30 까지 ALLOCATED 가 아님. 01:00 완료 목표를 놓칠 위험
+      - alert: ShipmentNotCreated
+        expr: (time() - dawn_fulfillment_run_latest_cutoff_seconds > 6600) and (time() - dawn_fulfillment_run_latest_cutoff_seconds < 86400) and dawn_fulfillment_run_latest_stage < 4
+        annotations:
+          summary: 00:50 까지 SHIPMENT_CREATED 가 아님
+      - alert: ShipmentJobFailed
+        expr: increase(spring_batch_job_seconds_count{spring_batch_job_name="dawnShipmentJob", spring_batch_job_status="FAILED"}[10m]) > 0
+        annotations:
+          summary: 출고 잡 실패. 원인을 고치고 같은 마감 시각으로 재시작
+      - alert: ShipmentVerifyFailed
+        expr: dawn_fulfillment_run_verify_failed_runs > 0
+        annotations:
+          summary: 출고 결과 검증 실패. 사람이 승인할 때까지 배차가 멈춤
+      - alert: ShipmentExceptionOpen
+        expr: dawn_fulfillment_exception_open_exceptions > 0
+        annotations:
+          summary: 사람이 이월하거나 관리자 취소해야 하는 출고 예외
+      - alert: UnfilledRatioHigh
+        expr: dawn_fulfillment_unfilled_ratio > 0.005
+        annotations:
+          summary: 못 채운 품목이 0.5% 를 넘음. 데이터 문제나 실사 차이
+      - alert: RegionMismatchRepeated
+        expr: dawn_fulfillment_region_mismatch_repeated_pairs > 0
+        annotations:
+          summary: 같은 상품, 같은 권역의 권역 불일치가 사흘 연속. 재고 이동이나 판매 제한 권역 설정 필요

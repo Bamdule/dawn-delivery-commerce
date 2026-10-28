@@ -41,7 +41,9 @@ import org.springframework.test.context.bean.override.mockito.MockitoBean;
 @SpringBootTest(properties = {
         "dawn.fulfillment.scheduler.enabled=false",
         "dawn.outbox.relay.enabled=false",
-        "dawn.fulfillment.target-fix.retry-delay=0s"})
+        "dawn.fulfillment.target-fix.retry-delay=0s",
+        "management.defaults.metrics.export.enabled=true",
+        "dawn.metrics.refresh.enabled=false"})
 @Import({MySqlContainers.class, KafkaContainers.class})
 public abstract class FulfillmentIntegrationTest {
 

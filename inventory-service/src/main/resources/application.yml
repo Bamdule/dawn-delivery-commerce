@@ -19,10 +19,13 @@ management:
   endpoints:
     web:
       exposure:
-        include: health,info
+        include: health,info,metrics,prometheus
 
 # 재고 서비스는 이벤트를 받기만 하고 내지 않아서 아웃박스 릴레이를 끈다
 dawn:
   outbox:
     relay:
+      enabled: false
+    # 아웃박스 표가 없어 아웃박스 지표도 만들지 않는다
+    metrics:
       enabled: false

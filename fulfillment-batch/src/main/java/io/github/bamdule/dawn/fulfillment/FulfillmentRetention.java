@@ -47,6 +47,8 @@ public class FulfillmentRetention {
                         COALESCE(paid_at, updated_at) < :before
                         AND NOT EXISTS (SELECT 1 FROM shipment_target_line l WHERE l.order_no = shipment_target.order_no)
                         """, SHIPMENT),
+                // 빠진 회차 판단은 가장 최근 회차만 보므로 끝난 회차는 90일이면 충분하다
+                new RetentionRule("cutoff-run", "cutoff_run", "cutoff_at < :before AND status IN ('VERIFIED', 'VERIFY_FAILED')", SHIPMENT),
                 new RetentionRule("stock-adjustment", "stock_adjustment", "created_at < :before", AUDIT),
                 // Spring Batch 메타는 재시작 근거로 90일. 끝난 실행만 지우고, 실행이 남지 않은 잡 인스턴스를 마지막에 지운다
                 new RetentionRule("batch-step-context", "BATCH_STEP_EXECUTION_CONTEXT",

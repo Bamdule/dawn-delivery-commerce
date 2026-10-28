@@ -53,6 +53,12 @@ public class ShipmentTargetRepository {
                 .update();
     }
 
+    // 주문 키의 쓰기는 모두 이 행을 먼저 잠근다. 그다음 품목 행, 센터 재고 행 순서다 (docs/design/03 "키 단위 순서의 조건")
+    public boolean lockTarget(String orderNo) {
+        return jdbcClient.sql("SELECT order_no FROM shipment_target WHERE order_no = :orderNo FOR UPDATE")
+                .param("orderNo", orderNo).query(String.class).optional().isPresent();
+    }
+
     public boolean exists(String orderNo) {
         return jdbcClient.sql("SELECT COUNT(*) FROM shipment_target WHERE order_no = :orderNo")
                 .param("orderNo", orderNo).query(Integer.class).single() > 0;

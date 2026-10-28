@@ -76,9 +76,16 @@ public class TargetFixer {
         }
     }
 
-    // 앞 회차가 아직 출고 중이면 그 회차의 대기 수량을 이월로 오해해 가져갈 수 있다
+    // 앞 회차가 아직 출고 중이면 그 회차의 대기 수량을 이월로 오해해 가져갈 수 있다.
+    // 앞 회차가 아예 빠졌으면 그 회차 범위에 결제된 주문은 어느 회차의 목록에도 오르지 않는다. 빠진 회차를 먼저 돌려야 한다
     private void requirePreviousFinished(LocalDateTime cutoffAt) {
-        Optional<CutoffRunStatus> previous = cutoffRunRepository.findStatus(cutoffAt.minusDays(CUTOFF_INTERVAL_DAYS));
+        LocalDateTime previousCutoff = cutoffAt.minusDays(CUTOFF_INTERVAL_DAYS);
+        Optional<LocalDateTime> latestBefore = cutoffRunRepository.findLatestBefore(cutoffAt);
+        if (latestBefore.isPresent() && latestBefore.get().isBefore(previousCutoff)) {
+            log.error("빠진 회차가 있어 대상 확정 보류 (cutoffAt={}, latestBefore={})", cutoffAt, latestBefore.get());
+            throw new StepPreconditionException("빠진 회차가 있습니다. " + previousCutoff + " 회차를 먼저 실행해야 합니다.");
+        }
+        Optional<CutoffRunStatus> previous = cutoffRunRepository.findStatus(previousCutoff);
         if (previous.isPresent() && !previous.get().finished()) {
             log.error("앞 회차 미완료로 대상 확정 보류 (cutoffAt={}, previousStatus={})", cutoffAt, previous.get());
             throw new StepPreconditionException("앞 회차가 끝나지 않았습니다. (cutoffAt=" + cutoffAt + ")");
@@ -165,6 +172,7 @@ public class TargetFixer {
         for (String orderNo : inRange) {
             if (!listed.contains(orderNo)) {
                 transactionTemplate.executeWithoutResult(status -> {
+                    shipmentTargetRepository.lockTarget(orderNo);
                     shipmentTargetRepository.cancelAllWaiting(orderNo);
                     shipmentTargetRepository.markCancelled(orderNo);
                 });

@@ -26,6 +26,14 @@ public class FulfillmentMetrics {
                 () -> count(jdbcClient, "SELECT COUNT(*) FROM cutoff_run WHERE status = 'VERIFY_FAILED'"));
         dbGauges.register("dawn.fulfillment.exception.open", "사람이 이월하거나 취소해야 하는 출고 예외", "exceptions",
                 () -> count(jdbcClient, "SELECT COUNT(*) FROM shipment_exception WHERE status = 'OPEN'"));
+        // 이월은 배정 회차를 그대로 둔다. 그 회차 뒤에 끝난 회차가 있는데도 대기 수량이 남았으면 하루 넘게 이월이 밀린 것이다
+        dbGauges.register("dawn.fulfillment.carryover.overdue", "배정 회차 다음 회차가 끝났는데도 남은 이월 대기 수량", "items",
+                () -> jdbcClient.sql("""
+                        SELECT COALESCE(SUM(l.waiting_qty), 0) FROM shipment_target_line l
+                          JOIN shipment_target t ON t.order_no = l.order_no
+                         WHERE t.status = 'WAITING' AND l.waiting_qty > 0
+                           AND l.assigned_cutoff_at < (SELECT MAX(cutoff_at) FROM cutoff_run WHERE status IN ('VERIFIED', 'VERIFY_FAILED'))
+                        """).query(Long.class).single());
         dbGauges.register("dawn.fulfillment.unfilled.ratio", "가장 최근에 검증까지 끝난 회차의 못 채운 수량 비율. 0.5% 넘으면 경보", "ratio",
                 () -> jdbcClient.sql("""
                         SELECT COALESCE((SELECT SUM(d.quantity) FROM unfillable_decision d WHERE d.cutoff_at = r.cutoff_at), 0)

@@ -6,6 +6,8 @@ import io.github.bamdule.dawn.event.OrderEvent.OrderLine;
 import io.github.bamdule.dawn.event.OrderEventType;
 import io.github.bamdule.dawn.event.Topics;
 import io.github.bamdule.dawn.fulfillment.target.ShipmentTargetRepository.NewTarget;
+import java.util.Comparator;
+import java.util.List;
 import org.springframework.kafka.annotation.KafkaListener;
 import org.springframework.stereotype.Component;
 import org.springframework.transaction.annotation.Transactional;
@@ -46,11 +48,12 @@ public class OrderEventConsumer {
                 || !inboxRepository.recordIfAbsent(CANCEL_CONSUMER, orderEvent.eventId().toString())) {
             return;
         }
-        if (!shipmentTargetRepository.exists(orderEvent.orderNo())) {
+        if (!shipmentTargetRepository.lockTarget(orderEvent.orderNo())) {
             shipmentTargetRepository.insertCancelledMark(orderEvent.orderNo());
             return;
         }
-        for (OrderLine orderLine : orderEvent.lines()) {
+        List<OrderLine> byProduct = orderEvent.lines().stream().sorted(Comparator.comparingLong(OrderLine::productId)).toList();
+        for (OrderLine orderLine : byProduct) {
             int movable = Math.min(orderLine.quantity(),
                     shipmentTargetRepository.waitingOf(orderEvent.orderNo(), orderLine.productId()));
             if (movable > 0) {

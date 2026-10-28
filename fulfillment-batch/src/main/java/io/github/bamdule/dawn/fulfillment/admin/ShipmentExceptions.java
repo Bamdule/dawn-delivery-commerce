@@ -30,20 +30,23 @@ public class ShipmentExceptions {
     // 배정 회차는 그대로 둔다. 남은 지난 회차 값을 다음 대상 확정이 보고 가져간다
     @Transactional
     public boolean defer(long exceptionNo) {
+        String orderNo = orderNoOf(exceptionNo);
+        shipmentTargetRepository.lockTarget(orderNo);
         if (!transition(exceptionNo, "DEFERRED")) {
             return false;
         }
-        lines(exceptionNo).forEach(line -> moveFromException(orderNoOf(exceptionNo), line, "waiting_qty"));
+        lines(exceptionNo).forEach(line -> moveFromException(orderNo, line, "waiting_qty"));
         return true;
     }
 
     // 결제가 끝난 주문이라 환불은 주문 서비스가 이벤트를 받아 한다. 키는 refund-{주문번호}-admin-{예외 번호} 다
     @Transactional
     public boolean cancel(long exceptionNo) {
+        String orderNo = orderNoOf(exceptionNo);
+        shipmentTargetRepository.lockTarget(orderNo);
         if (!transition(exceptionNo, "CANCELLED")) {
             return false;
         }
-        String orderNo = orderNoOf(exceptionNo);
         List<OrderLine> lines = lines(exceptionNo);
         lines.forEach(line -> moveFromException(orderNo, line, "cancelled_qty"));
         shipmentTargetRepository.markCancelledIfNothingLeft(orderNo);
@@ -54,6 +57,12 @@ public class ShipmentExceptions {
     // 잘못 만든 출고 지시를 배차 전에 되돌려 출고 예외로 만든다. 그 뒤는 다른 예외처럼 이월하거나 취소한다
     @Transactional
     public boolean cancelShipmentOrder(long shipmentOrderId) {
+        String targetOrderNo = jdbcClient.sql("SELECT order_no FROM shipment_order WHERE id = :id")
+                .param("id", shipmentOrderId).query(String.class).optional().orElse(null);
+        if (targetOrderNo == null) {
+            return false;
+        }
+        shipmentTargetRepository.lockTarget(targetOrderNo);
         int cancelled = jdbcClient.sql("UPDATE shipment_order SET status = 'CANCELLED' WHERE id = :id AND status = 'CREATED'")
                 .param("id", shipmentOrderId).update();
         if (cancelled == 0) {
@@ -73,10 +82,8 @@ public class ShipmentExceptions {
                 .param("centerId", shipmentOrder.centerId())
                 .update(keyHolder, "id");
         long exceptionNo = keyHolder.getKey().longValue();
+        // 출고 지시 생성과 같은 순서로 품목 행을 모두 잠근 뒤 센터 재고 행을 잠근다
         for (OrderLine line : lines) {
-            jdbcClient.sql("UPDATE center_stock SET quantity = quantity + :quantity, updated_at = NOW(3) WHERE center_id = :centerId AND product_id = :productId")
-                    .param("quantity", line.quantity()).param("centerId", shipmentOrder.centerId()).param("productId", line.productId())
-                    .update();
             jdbcClient.sql("""
                     UPDATE shipment_target_line SET shipped_qty = shipped_qty - :quantity, exception_qty = exception_qty + :quantity
                      WHERE order_no = :orderNo AND product_id = :productId AND shipped_qty >= :quantity
@@ -85,6 +92,11 @@ public class ShipmentExceptions {
                     .update();
             jdbcClient.sql("INSERT INTO shipment_exception_line (shipment_exception_id, product_id, quantity) VALUES (:id, :productId, :quantity)")
                     .param("id", exceptionNo).param("productId", line.productId()).param("quantity", line.quantity())
+                    .update();
+        }
+        for (OrderLine line : lines) {
+            jdbcClient.sql("UPDATE center_stock SET quantity = quantity + :quantity, updated_at = NOW(3) WHERE center_id = :centerId AND product_id = :productId")
+                    .param("quantity", line.quantity()).param("centerId", shipmentOrder.centerId()).param("productId", line.productId())
                     .update();
         }
         return true;

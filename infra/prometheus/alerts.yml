@@ -109,6 +109,10 @@ groups:
         expr: dawn_fulfillment_exception_open_exceptions > 0
         annotations:
           summary: 사람이 이월하거나 관리자 취소해야 하는 출고 예외
+      - alert: CarryoverOverdue
+        expr: dawn_fulfillment_carryover_overdue_items > 0
+        annotations:
+          summary: 이월된 대기 수량이 다음 회차에도 나가지 않음. 하루 넘게 밀린 이월
       - alert: UnfilledRatioHigh
         expr: dawn_fulfillment_unfilled_ratio > 0.005
         annotations:

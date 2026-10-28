@@ -5,6 +5,7 @@ import io.github.bamdule.dawn.fulfillment.event.FulfillmentEventPublisher;
 import io.github.bamdule.dawn.fulfillment.run.CutoffRunRepository;
 import io.github.bamdule.dawn.fulfillment.run.CutoffRunStatus;
 import io.github.bamdule.dawn.fulfillment.run.StepPreconditionException;
+import io.github.bamdule.dawn.fulfillment.target.ShipmentTargetRepository;
 import java.time.LocalDateTime;
 import java.util.List;
 import org.springframework.dao.DuplicateKeyException;
@@ -20,13 +21,16 @@ public class UnfillablePublisher {
     private final FulfillmentEventPublisher fulfillmentEventPublisher;
     private final JdbcClient jdbcClient;
     private final TransactionTemplate transactionTemplate;
+    private final ShipmentTargetRepository shipmentTargetRepository;
 
     public UnfillablePublisher(CutoffRunRepository cutoffRunRepository, FulfillmentEventPublisher fulfillmentEventPublisher,
-                               JdbcClient jdbcClient, TransactionTemplate transactionTemplate) {
+                               JdbcClient jdbcClient, TransactionTemplate transactionTemplate,
+                               ShipmentTargetRepository shipmentTargetRepository) {
         this.cutoffRunRepository = cutoffRunRepository;
         this.fulfillmentEventPublisher = fulfillmentEventPublisher;
         this.jdbcClient = jdbcClient;
         this.transactionTemplate = transactionTemplate;
+        this.shipmentTargetRepository = shipmentTargetRepository;
     }
 
     public void publish(LocalDateTime cutoffAt) {
@@ -52,6 +56,7 @@ public class UnfillablePublisher {
     }
 
     private void publishOne(LocalDateTime cutoffAt, String orderNo) {
+        shipmentTargetRepository.lockTarget(orderNo);
         List<OrderLine> lines = jdbcClient.sql("""
                 SELECT product_id, quantity FROM unfillable_decision WHERE cutoff_at = :cutoffAt AND order_no = :orderNo ORDER BY product_id
                 """)

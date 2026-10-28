@@ -185,6 +185,19 @@ class ShipmentJobTest extends FulfillmentIntegrationTest {
     }
 
     @Test
+    void 앞_회차가_빠졌으면_그_회차를_먼저_돌리라고_거부하고_돌린_뒤에는_진행한다() throws Exception {
+        LocalDateTime cutoff = newCutoff();
+        jdbcClient.sql("INSERT INTO cutoff_run (cutoff_at, status, updated_at) VALUES (:cutoffAt, 'VERIFIED', NOW(3))")
+                .param("cutoffAt", cutoff.minusDays(2)).update();
+
+        assertThat(run(cutoff).getStatus()).as("하루 전 회차 범위의 주문이 어느 목록에도 오르지 않는다").isEqualTo(BatchStatus.FAILED);
+        assertThat(runStatus(cutoff)).isEqualTo("NONE");
+
+        assertThat(run(cutoff.minusDays(1)).getStatus()).isEqualTo(BatchStatus.COMPLETED);
+        assertThat(run(cutoff).getStatus()).isEqualTo(BatchStatus.COMPLETED);
+    }
+
+    @Test
     void 할당_저장_중에_죽고_그사이_입고와_이월이_들어와도_재시작한_결과가_처음과_같다() {
         LocalDateTime cutoff = newCutoff();
         long product = newProductId();

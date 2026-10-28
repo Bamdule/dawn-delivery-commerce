@@ -27,6 +27,13 @@ public class CutoffRunRepository {
                 .optional();
     }
 
+    public Optional<LocalDateTime> findLatestBefore(LocalDateTime cutoffAt) {
+        return jdbcClient.sql("SELECT MAX(cutoff_at) FROM cutoff_run WHERE cutoff_at < :cutoffAt")
+                .param("cutoffAt", cutoffAt)
+                .query(LocalDateTime.class)
+                .optional();
+    }
+
     public CutoffRunStatus status(LocalDateTime cutoffAt) {
         return findStatus(cutoffAt).orElseThrow(() -> new IllegalStateException("마감 회차가 없습니다. (cutoffAt=" + cutoffAt + ")"));
     }

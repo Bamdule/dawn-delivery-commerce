@@ -51,6 +51,11 @@ class FulfillmentMetricsTest extends FulfillmentIntegrationTest {
             paid(lastCutoff, lastCutoff.minusHours(1), "SEOUL", line(busanOnly, 1));
             run(lastCutoff);
         }
+        // 첫 회차에 배정된 뒤 이월됐는데 다음 회차들이 가져가지 못한 대기 수량이다
+        long carriedOver = newProductId();
+        String carriedOverOrder = paid(null, FIRST_CUTOFF.minusHours(2), "SEOUL", line(carriedOver, 2));
+        jdbcClient.sql("UPDATE shipment_target_line SET assigned_cutoff_at = :cutoffAt WHERE order_no = :orderNo")
+                .param("cutoffAt", FIRST_CUTOFF).param("orderNo", carriedOverOrder).update();
         dbGauges.refresh();
 
         String body = scrape();
@@ -59,6 +64,7 @@ class FulfillmentMetricsTest extends FulfillmentIntegrationTest {
         assertThat(PrometheusScrape.value(body, "dawn_fulfillment_exception_open_exceptions")).isGreaterThanOrEqualTo(1);
         assertThat(PrometheusScrape.value(body, "dawn_fulfillment_region_mismatch_repeated_pairs")).isGreaterThanOrEqualTo(1);
         assertThat(PrometheusScrape.value(body, "dawn_fulfillment_unfilled_ratio")).isEqualTo(1.0);
+        assertThat(PrometheusScrape.value(body, "dawn_fulfillment_carryover_overdue_items")).isGreaterThanOrEqualTo(2);
         assertThat(PrometheusScrape.value(body, "dawn_fulfillment_run_latest_stage")).as("VERIFIED").isEqualTo(5);
         assertThat(PrometheusScrape.value(body, "dawn_fulfillment_run_latest_cutoff_seconds"))
                 .isEqualTo(lastCutoff.atZone(ZoneId.of("Asia/Seoul")).toEpochSecond());

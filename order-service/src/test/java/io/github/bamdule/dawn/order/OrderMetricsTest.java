@@ -4,7 +4,6 @@ import static org.assertj.core.api.Assertions.assertThat;
 
 import io.github.bamdule.dawn.event.PaymentEvent;
 import io.github.bamdule.dawn.event.PaymentEventType;
-import io.github.bamdule.dawn.event.Topics;
 import io.github.bamdule.dawn.messaging.DbGauges;
 import io.github.bamdule.dawn.messaging.test.PrometheusScrape;
 import io.github.bamdule.dawn.order.recovery.PaymentEventConsumer;
@@ -13,10 +12,10 @@ import java.util.UUID;
 import org.junit.jupiter.api.Test;
 import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.boot.webmvc.test.autoconfigure.AutoConfigureMockMvc;
-import org.springframework.kafka.core.KafkaTemplate;
 import org.springframework.test.web.servlet.assertj.MockMvcTester;
 
-// 설계 01 "운영 지표" 표의 경보 기준을 넘는 상황을 만들고 /actuator/prometheus 에서 값을 읽는다
+// 설계 01 "운영 지표" 표의 경보 기준을 넘는 상황을 만들고 /actuator/prometheus 에서 값을 읽는다.
+// 처리 실패 토픽 카운터는 컨슈머가 하나뿐인 메시징 모듈 테스트에서 본다. 여기는 컨텍스트마다 같은 그룹의 컨슈머가 있어 다른 컨텍스트가 받을 수 있다
 @AutoConfigureMockMvc
 class OrderMetricsTest extends OrderIntegrationTest {
 
@@ -28,9 +27,6 @@ class OrderMetricsTest extends OrderIntegrationTest {
 
     @Autowired
     private PaymentEventConsumer paymentEventConsumer;
-
-    @Autowired
-    private KafkaTemplate<String, String> kafkaTemplate;
 
     @Test
     void 십오_분_넘은_PENDING_주문과_결제_시도가_지표에_보인다() throws Exception {
@@ -88,20 +84,6 @@ class OrderMetricsTest extends OrderIntegrationTest {
         assertThat(PrometheusScrape.value(body, "dawn_outbox_pending_stuck_events")).isGreaterThanOrEqualTo(1);
     }
 
-    @Test
-    void 처리하지_못한_메시지가_처리_실패_토픽으로_가면_토픽별_카운터가_오른다() throws Exception {
-        String metric = "dawn_consumer_dead_letter_total{topic=\"payment.events\"";
-        double before = sumStartingWith(scrape(), metric);
-
-        kafkaTemplate.send(Topics.PAYMENT_EVENTS, "broken", "형식이 깨진 메시지").get();
-
-        long deadline = System.currentTimeMillis() + 30_000;
-        while (sumStartingWith(scrape(), metric) == before && System.currentTimeMillis() < deadline) {
-            Thread.sleep(500);
-        }
-        assertThat(sumStartingWith(scrape(), metric)).isEqualTo(before + 1);
-    }
-
     private void insertRefund(String orderNo, String suffix, String status, String timeColumn) {
         jdbcClient.sql("""
                 INSERT INTO refund_request (order_no, refund_key, payment_round, amount, reason, status, next_attempt_at, created_at, updated_at)
@@ -111,11 +93,6 @@ class OrderMetricsTest extends OrderIntegrationTest {
                 .update();
         jdbcClient.sql("UPDATE refund_request SET " + timeColumn + " WHERE refund_key = :refundKey")
                 .param("refundKey", "refund-" + orderNo + "-metrics-" + suffix).update();
-    }
-
-    private static double sumStartingWith(String body, String prefix) {
-        return body.lines().filter(line -> line.startsWith(prefix))
-                .mapToDouble(line -> Double.parseDouble(line.substring(line.lastIndexOf(' ') + 1))).sum();
     }
 
     private String scrape() throws Exception {

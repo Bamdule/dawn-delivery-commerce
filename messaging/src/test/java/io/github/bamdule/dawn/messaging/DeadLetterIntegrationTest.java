@@ -4,6 +4,8 @@ import static org.assertj.core.api.Assertions.assertThat;
 
 import io.github.bamdule.dawn.messaging.test.KafkaContainers;
 import io.github.bamdule.dawn.messaging.test.MySqlContainers;
+import io.micrometer.core.instrument.MeterRegistry;
+import io.micrometer.core.instrument.simple.SimpleMeterRegistry;
 import java.time.Duration;
 import java.util.ArrayList;
 import java.util.List;
@@ -32,6 +34,9 @@ class DeadLetterIntegrationTest {
     @Autowired
     private ConsumerFactory<String, String> consumerFactory;
 
+    @Autowired
+    private MeterRegistry meterRegistry;
+
     @Test
     void 재시도해도_처리하지_못한_메시지는_처리_실패_토픽에_같은_키로_남는다() throws Exception {
         kafkaTemplate.send(TOPIC, "order-9", "{\"broken\":true}").get();
@@ -49,6 +54,9 @@ class DeadLetterIntegrationTest {
         assertThat(deadLetters.getFirst().topic()).isEqualTo(TOPIC + "-dlt");
         assertThat(deadLetters.getFirst().key()).isEqualTo("order-9");
         assertThat(deadLetters.getFirst().value()).isEqualTo("{\"broken\":true}");
+        assertThat(meterRegistry.counter(ConsumerErrorHandling.DEAD_LETTER_METRIC, "topic", TOPIC).count())
+                .as("처리 실패 토픽에 보낸 만큼 토픽별 카운터가 오른다")
+                .isEqualTo(1.0);
     }
 
     @Autowired
@@ -76,6 +84,12 @@ class DeadLetterIntegrationTest {
 
     @TestConfiguration(proxyBeanMethods = false)
     static class BrokenListenerConfig {
+
+        // 처리 실패 토픽 적재 카운터를 보려고 지표 저장소를 둔다. 서비스에서는 actuator 가 만든다
+        @Bean
+        SimpleMeterRegistry simpleMeterRegistry() {
+            return new SimpleMeterRegistry();
+        }
 
         @Bean
         BrokenListener brokenListener() {

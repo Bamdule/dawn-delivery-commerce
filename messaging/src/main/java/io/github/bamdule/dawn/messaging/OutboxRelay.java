@@ -89,27 +89,29 @@ public class OutboxRelay {
         return sendResults;
     }
 
+    // 성공은 한 문장으로 기록한다. 한 바퀴에 선점한 행은 선점 값이 모두 같아서 묶어도 조건이 그대로다.
+    // 한 건씩 쓰면 기록이 한 바퀴 시간의 3분의 2를 차지했다 (docs/experiments/02-릴레이-처리량.md)
     void record(List<SendResult> sendResults) {
         transactionTemplate.executeWithoutResult(status -> {
-            for (SendResult sendResult : sendResults) {
-                ClaimedEvent claimedEvent = sendResult.claimedEvent();
-                if (sendResult.succeeded()) {
-                    markSent(claimedEvent);
-                } else {
-                    scheduleRetry(claimedEvent);
-                }
+            List<SendResult> succeeded = sendResults.stream().filter(SendResult::succeeded).toList();
+            if (!succeeded.isEmpty()) {
+                markSent(succeeded.getFirst().claimedEvent().claimedUntil(),
+                        succeeded.stream().map(sendResult -> sendResult.claimedEvent().seq()).toList());
             }
+            sendResults.stream()
+                    .filter(sendResult -> !sendResult.succeeded())
+                    .forEach(sendResult -> scheduleRetry(sendResult.claimedEvent()));
         });
     }
 
     // 선점이 끝나 다른 릴레이가 다시 집은 행을 늦게 덮어쓰지 않도록 내 선점 값을 조건으로 건다
-    private void markSent(ClaimedEvent claimedEvent) {
+    private void markSent(LocalDateTime claimedUntil, List<Long> seqs) {
         jdbcClient.sql("""
                 UPDATE outbox_event SET status = 'SENT', sent_at = NOW(3)
-                 WHERE seq = :seq AND status = 'PENDING' AND next_attempt_at = :claimedUntil
+                 WHERE seq IN (:seqs) AND status = 'PENDING' AND next_attempt_at = :claimedUntil
                 """)
-                .param("seq", claimedEvent.seq())
-                .param("claimedUntil", claimedEvent.claimedUntil())
+                .param("seqs", seqs)
+                .param("claimedUntil", claimedUntil)
                 .update();
     }
 

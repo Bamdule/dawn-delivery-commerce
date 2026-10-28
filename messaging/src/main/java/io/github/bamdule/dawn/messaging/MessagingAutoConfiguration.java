@@ -1,6 +1,8 @@
 package io.github.bamdule.dawn.messaging;
 
 import io.micrometer.core.instrument.MeterRegistry;
+import java.util.ArrayList;
+import java.util.List;
 import org.apache.kafka.clients.producer.ProducerConfig;
 import org.springframework.beans.factory.ObjectProvider;
 import org.springframework.beans.factory.SmartInitializingSingleton;
@@ -8,6 +10,7 @@ import org.springframework.boot.autoconfigure.AutoConfiguration;
 import org.springframework.boot.autoconfigure.condition.ConditionalOnBean;
 import org.springframework.boot.autoconfigure.condition.ConditionalOnMissingBean;
 import org.springframework.boot.autoconfigure.condition.ConditionalOnProperty;
+import org.springframework.boot.autoconfigure.condition.ConditionalOnWebApplication;
 import org.springframework.boot.context.properties.EnableConfigurationProperties;
 import org.springframework.boot.kafka.autoconfigure.DefaultKafkaProducerFactoryCustomizer;
 import org.springframework.context.annotation.Bean;
@@ -70,9 +73,27 @@ public class MessagingAutoConfiguration {
     }
 
     @Bean
-    @ConditionalOnProperty(prefix = "dawn.outbox.relay", name = "enabled", havingValue = "true", matchIfMissing = true)
-    public OutboxCleanupScheduler outboxCleanupScheduler(OutboxMaintenance outboxMaintenance) {
-        return new OutboxCleanupScheduler(outboxMaintenance);
+    @ConditionalOnMissingBean
+    public RetentionCleaner retentionCleaner(JdbcClient jdbcClient) {
+        return new RetentionCleaner(jdbcClient);
+    }
+
+    @Bean
+    @ConditionalOnProperty(prefix = "dawn.outbox", name = "enabled", havingValue = "true", matchIfMissing = true)
+    public RetentionRule outboxSentRetention() {
+        return OutboxMaintenance.SENT_RETENTION;
+    }
+
+    // 서비스가 등록한 보존 규칙 묶음과 메시징 모듈의 아웃박스 규칙을 모두 돈다
+    @Bean
+    @ConditionalOnProperty(prefix = "dawn.retention", name = "enabled", havingValue = "true", matchIfMissing = true)
+    public RetentionCleanupScheduler retentionCleanupScheduler(RetentionCleaner retentionCleaner,
+                                                               ObjectProvider<RetentionRules> serviceRules,
+                                                               ObjectProvider<RetentionRule> singleRules) {
+        List<RetentionRule> rules = new ArrayList<>();
+        serviceRules.orderedStream().forEach(retentionRules -> rules.addAll(retentionRules.rules()));
+        singleRules.orderedStream().forEach(rules::add);
+        return new RetentionCleanupScheduler(retentionCleaner, rules);
     }
 
     @Bean
@@ -105,11 +126,18 @@ public class MessagingAutoConfiguration {
         return new DbGaugeRefresher(dbGauges);
     }
 
-    // 재고 서비스는 이벤트를 내지 않아 아웃박스 표가 없다. 그런 서비스는 이 속성을 꺼서 지표를 만들지 않는다
+    // 재고 서비스는 이벤트를 내지 않아 아웃박스 표가 없다. 그런 서비스는 dawn.outbox.enabled 를 꺼서 지표와 관리 API 를 만들지 않는다
     @Bean
     @ConditionalOnBean(DbGauges.class)
-    @ConditionalOnProperty(prefix = "dawn.outbox.metrics", name = "enabled", havingValue = "true", matchIfMissing = true)
+    @ConditionalOnProperty(prefix = "dawn.outbox", name = "enabled", havingValue = "true", matchIfMissing = true)
     public SmartInitializingSingleton outboxMetrics(DbGauges dbGauges, JdbcClient jdbcClient, OutboxProperties outboxProperties) {
         return () -> OutboxMetrics.register(dbGauges, jdbcClient, outboxProperties);
+    }
+
+    @Bean
+    @ConditionalOnWebApplication(type = ConditionalOnWebApplication.Type.SERVLET)
+    @ConditionalOnProperty(prefix = "dawn.outbox", name = "enabled", havingValue = "true", matchIfMissing = true)
+    public OutboxAdminController outboxAdminController(OutboxMaintenance outboxMaintenance, OutboxProperties outboxProperties) {
+        return new OutboxAdminController(outboxMaintenance, outboxProperties);
     }
 }

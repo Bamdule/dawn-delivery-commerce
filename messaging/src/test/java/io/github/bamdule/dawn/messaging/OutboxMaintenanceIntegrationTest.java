@@ -4,7 +4,6 @@ import static org.assertj.core.api.Assertions.assertThat;
 
 import io.github.bamdule.dawn.messaging.test.KafkaContainers;
 import io.github.bamdule.dawn.messaging.test.MySqlContainers;
-import java.time.Duration;
 import java.util.UUID;
 import org.junit.jupiter.api.Test;
 import org.springframework.beans.factory.annotation.Autowired;
@@ -27,6 +26,9 @@ class OutboxMaintenanceIntegrationTest {
     private OutboxMaintenance outboxMaintenance;
 
     @Autowired
+    private RetentionCleaner retentionCleaner;
+
+    @Autowired
     private JdbcClient jdbcClient;
 
     @Autowired
@@ -45,7 +47,7 @@ class OutboxMaintenanceIntegrationTest {
         transactionTemplate.executeWithoutResult(status ->
                 outboxWriter.write(new OutboxMessage(UUID.randomUUID(), topic, "fresh", "{}")));
 
-        int deleted = outboxMaintenance.deleteSentOlderThan(Duration.ofDays(7));
+        int deleted = retentionCleaner.clean(OutboxMaintenance.SENT_RETENTION);
 
         assertThat(deleted).isGreaterThanOrEqualTo(2_500);
         assertThat(countByTopic(topic)).isEqualTo(1);

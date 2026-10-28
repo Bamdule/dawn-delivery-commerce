@@ -35,6 +35,11 @@ subprojects {
         testRuntimeOnly("org.junit.platform:junit-platform-launcher")
     }
 
+    // 라이브러리 모듈(messaging)은 Boot 플러그인이 없어 인자 이름이 빠진다. @PathVariable 같은 이름 기반 바인딩이 읽게 남긴다
+    tasks.withType<JavaCompile> {
+        options.compilerArgs.add("-parameters")
+    }
+
     tasks.withType<Test> {
         useJUnitPlatform()
     }

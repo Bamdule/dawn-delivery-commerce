@@ -6,9 +6,13 @@ import io.github.bamdule.dawn.payment.pg.PgClient;
 import io.github.bamdule.dawn.payment.round.PaymentRepository.RequestedPayment;
 import java.time.Duration;
 import java.time.Instant;
+import java.util.concurrent.ExecutorService;
+import java.util.concurrent.Executors;
+import java.util.concurrent.Semaphore;
 import java.util.concurrent.ThreadLocalRandom;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
+import org.springframework.beans.factory.annotation.Value;
 import org.springframework.scheduling.annotation.Scheduled;
 import org.springframework.stereotype.Component;
 
@@ -26,51 +30,74 @@ public class RequestedPaymentResolver {
     private final PaymentRounds paymentRounds;
     private final PgClient pgClient;
     private final PgCallGuard pgCallGuard;
+    private final int inquiryConcurrency;
 
     public RequestedPaymentResolver(PaymentRepository paymentRepository, PaymentRounds paymentRounds,
-                                    PgClient pgClient, PgCallGuard pgCallGuard) {
+                                    PgClient pgClient, PgCallGuard pgCallGuard,
+                                    @Value("${dawn.payment.inquiry-concurrency:50}") int inquiryConcurrency) {
         this.paymentRepository = paymentRepository;
         this.paymentRounds = paymentRounds;
         this.pgClient = pgClient;
         this.pgCallGuard = pgCallGuard;
+        this.inquiryConcurrency = inquiryConcurrency;
     }
 
+    // 오래된 순으로 최대 1,000건을 동시 50건까지 나눠 묻는다. 순서대로 물으면 대행사 300ms 에 1,000건이 5분 걸린다.
+    // 한 건의 오류는 그 건만 건너뛰고, 대행사가 계속 실패하면 회로가 열려 나머지를 바로 건너뛴다
     @Scheduled(fixedDelayString = "${dawn.payment.inquiry-interval:10s}")
     public void run() {
         if (pgCallGuard.isCircuitOpen()) {
             return;
         }
-        for (RequestedPayment requestedPayment : paymentRepository.findRequestedDue(BATCH_LIMIT)) {
-            if (!resolve(requestedPayment)) {
-                return;
+        Semaphore concurrency = new Semaphore(inquiryConcurrency);
+        try (ExecutorService executorService = Executors.newVirtualThreadPerTaskExecutor()) {
+            for (RequestedPayment requestedPayment : paymentRepository.findRequestedDue(BATCH_LIMIT)) {
+                concurrency.acquireUninterruptibly();
+                executorService.submit(() -> {
+                    try {
+                        resolve(requestedPayment);
+                    } catch (RuntimeException exception) {
+                        log.error("결제 결과 조회 처리 오류 (idempotencyKey={})", requestedPayment.idempotencyKey(), exception);
+                    } finally {
+                        concurrency.release();
+                    }
+                });
             }
         }
     }
 
-    // 대행사에 묻지 못했으면 false 를 돌려 이번 주기를 멈춘다
-    private boolean resolve(RequestedPayment requestedPayment) {
+    private void resolve(RequestedPayment requestedPayment) {
         PaymentRow paymentRow = paymentRepository.findByIdempotencyKey(requestedPayment.idempotencyKey()).orElseThrow();
-        String status;
         if (!pgCallGuard.tryEnter()) {
-            return false;
+            return;
         }
         Instant startedAt = Instant.now();
         boolean failed = true;
+        String status;
         try {
             status = pgClient.inquire(requestedPayment.idempotencyKey());
             failed = false;
         } catch (RuntimeException exception) {
             log.warn("결제 결과 조회 실패 (idempotencyKey={})", requestedPayment.idempotencyKey());
-            return false;
+            markUnknownIfOverdue(requestedPayment, paymentRow);
+            return;
         } finally {
             pgCallGuard.exit(failed, Duration.between(startedAt, Instant.now()));
         }
         switch (status) {
             case "APPROVED" -> paymentRounds.recordApproved(paymentRow);
             case "DECLINED" -> paymentRounds.recordFailed(paymentRow, "DECLINED");
-            default -> handleNotFound(requestedPayment, paymentRow);
+            case PgClient.INQUIRY_NOT_FOUND -> handleNotFound(requestedPayment, paymentRow);
+            default -> markUnknownIfOverdue(requestedPayment, paymentRow);
         }
-        return true;
+    }
+
+    // 조회가 계속 실패해도 10분이 지나면 UNKNOWN 으로 옮긴다. 그래야 사람이 관리 API 로 확정할 수 있다
+    private void markUnknownIfOverdue(RequestedPayment requestedPayment, PaymentRow paymentRow) {
+        if (requestedPayment.overdue()) {
+            paymentRounds.markUnknown(paymentRow);
+            log.error("결제 결과 미확정 (orderNo={}, paymentRound={})", requestedPayment.orderNo(), requestedPayment.paymentRound());
+        }
     }
 
     // "요청 없음"은 마지막 전송에서 60초가 지난 뒤에만 믿는다. 다시 보낸 요청이 아직 처리 중일 수 있다
@@ -84,10 +111,7 @@ public class RequestedPaymentResolver {
             resend(requestedPayment, paymentRow);
             return;
         }
-        if (requestedPayment.overdue()) {
-            paymentRounds.markUnknown(paymentRow);
-            log.error("결제 결과 미확정 (orderNo={}, paymentRound={})", requestedPayment.orderNo(), requestedPayment.paymentRound());
-        }
+        markUnknownIfOverdue(requestedPayment, paymentRow);
     }
 
     // 멱등키를 지원하는 대행사면 5xx 건을 같은 키로 다시 보낸다. 1초부터 두 배씩, 지터를 더한다

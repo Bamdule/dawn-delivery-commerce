@@ -22,6 +22,7 @@ public class FakePgStore {
     private final Map<String, RefundRecord> refunds = new ConcurrentHashMap<>();
     private final ConcurrentLinkedQueue<ScheduledBehavior> approveBehaviors = new ConcurrentLinkedQueue<>();
     private final ConcurrentLinkedQueue<String> refundBehaviors = new ConcurrentLinkedQueue<>();
+    private final ConcurrentLinkedQueue<String> inquiryBehaviors = new ConcurrentLinkedQueue<>();
     private final AtomicBoolean idempotencySupported = new AtomicBoolean(true);
     private final AtomicInteger approveCalls = new AtomicInteger();
 
@@ -41,6 +42,15 @@ public class FakePgStore {
 
     public void enqueueRefund(String behavior) {
         refundBehaviors.add(behavior);
+    }
+
+    public String nextInquiryBehavior() {
+        String next = inquiryBehaviors.poll();
+        return next == null ? "ANSWER" : next;
+    }
+
+    public void enqueueInquiry(String behavior) {
+        inquiryBehaviors.add(behavior);
     }
 
     public Optional<PaymentRecord> payment(String idempotencyKey) {
@@ -93,6 +103,7 @@ public class FakePgStore {
         refunds.clear();
         approveBehaviors.clear();
         refundBehaviors.clear();
+        inquiryBehaviors.clear();
         idempotencySupported.set(true);
         approveCalls.set(0);
     }

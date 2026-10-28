@@ -92,6 +92,9 @@ class PaymentIntegrationTest {
     @BeforeEach
     void resetFakePg() {
         fakePg.post().uri("/fake/reset").retrieve().toBodilessEntity();
+        // 앞선 시험이 남긴 미결 결제와 환불을 배치가 줍지 않게 미룬다. 대행사 기록을 지웠으니 주우면 다시 보낸다
+        jdbcClient.sql("UPDATE payment SET next_attempt_at = NOW(3) + INTERVAL 1 DAY WHERE status = 'REQUESTED'").update();
+        jdbcClient.sql("UPDATE refund SET last_sent_at = NOW(3) + INTERVAL 1 DAY WHERE status = 'REQUESTED'").update();
     }
 
     @Test
@@ -250,6 +253,59 @@ class PaymentIntegrationTest {
     }
 
     @Test
+    void 한_건의_조회가_실패해도_같은_주기의_다른_건은_확정한다() {
+        String firstOrder = newOrderNo();
+        String secondOrder = newOrderNo();
+        nextApprove("ERROR_AFTER_APPROVE", 0);
+        approve(firstOrder, 1);
+        nextApprove("ERROR_AFTER_APPROVE", 0);
+        approve(secondOrder, 1);
+        makeInquiryDue(firstOrder, 1);
+        makeInquiryDue(secondOrder, 1);
+        nextInquiry("ERROR");
+
+        requestedPaymentResolver.run();
+
+        assertThat(List.of(statusOf(firstOrder, 1), statusOf(secondOrder, 1)))
+                .as("실패한 한 건은 다음 주기로 넘기고 나머지는 확정한다")
+                .containsExactlyInAnyOrder("APPROVED", "REQUESTED");
+    }
+
+    @Test
+    void 조회가_계속_실패해도_10분이_지나면_UNKNOWN_으로_넘겨_사람이_확정하게_한다() {
+        String orderNo = newOrderNo();
+        nextApprove("NEVER_RECEIVED", 0);
+        approve(orderNo, 1);
+        jdbcClient.sql("UPDATE payment SET requested_at = NOW(3) - INTERVAL 11 MINUTE, next_attempt_at = NULL WHERE order_no = :orderNo")
+                .param("orderNo", orderNo).update();
+        nextInquiry("EMPTY");
+
+        requestedPaymentResolver.run();
+
+        assertThat(statusOf(orderNo, 1)).isEqualTo("UNKNOWN");
+    }
+
+    @Test
+    void 결과를_모르는_환불은_30초에_한_번만_다시_보낸다() {
+        String orderNo = newOrderNo();
+        approve(orderNo, 1);
+        String refundKey = "refund-" + orderNo + "-cancel";
+        refunds.accept(new RefundCommand(refundKey, orderNo, 1, 45_000));
+        fakePg.post().uri("/fake/behaviors/refund?behavior=ERROR").retrieve().toBodilessEntity();
+
+        refundJob.run();
+        assertThat(refundStatus(refundKey)).isEqualTo("REQUESTED");
+        refundJob.run();
+        assertThat(refundStatus(refundKey)).as("방금 보낸 환불은 다시 보내지 않는다").isEqualTo("REQUESTED");
+
+        jdbcClient.sql("UPDATE refund SET last_sent_at = NOW(3) - INTERVAL 31 SECOND WHERE refund_key = :refundKey")
+                .param("refundKey", refundKey).update();
+        refundJob.run();
+
+        assertThat(refundStatus(refundKey)).isEqualTo("COMPLETED");
+    }
+
+    @Test
     void 대행사가_5xx_로_답한_요청은_같은_키로_다시_보내_승인을_한_번만_받는다() {
         String orderNo = newOrderNo();
         nextApprove("ERROR_BEFORE_PROCESSING", 0);
@@ -319,6 +375,10 @@ class PaymentIntegrationTest {
     private void nextApprove(String behavior, long delayMillis) {
         fakePg.post().uri("/fake/behaviors/approve?behavior={behavior}&delayMillis={delay}", behavior, delayMillis)
                 .retrieve().toBodilessEntity();
+    }
+
+    private void nextInquiry(String behavior) {
+        fakePg.post().uri("/fake/behaviors/inquiry?behavior={behavior}", behavior).retrieve().toBodilessEntity();
     }
 
     private int approveCalls() {

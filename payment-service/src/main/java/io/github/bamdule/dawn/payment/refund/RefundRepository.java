@@ -42,15 +42,20 @@ public class RefundRepository {
                 .param("to", to).param("id", refundId).param("from", from).update() == 1;
     }
 
-    public List<DueRefund> findRequested(int limit) {
+    public List<DueRefund> findRequested(int limit, int resendIntervalSeconds) {
         return jdbcClient.sql("""
                 SELECT r.id, r.refund_key, r.amount, p.order_no, p.payment_round, p.idempotency_key AS payment_key,
                        r.requested_at <= NOW(3) - INTERVAL 1 HOUR AS overdue
                   FROM refund r JOIN payment p ON p.id = r.payment_id
                  WHERE r.status = 'REQUESTED'
+                   AND (r.last_sent_at IS NULL OR r.last_sent_at < NOW(3) - INTERVAL :resendIntervalSeconds SECOND)
                  ORDER BY r.requested_at LIMIT :limit
                 """)
-                .param("limit", limit).query(DueRefund.class).list();
+                .param("limit", limit).param("resendIntervalSeconds", resendIntervalSeconds).query(DueRefund.class).list();
+    }
+
+    public void recordSent(long refundId) {
+        jdbcClient.sql("UPDATE refund SET last_sent_at = NOW(3) WHERE id = :id").param("id", refundId).update();
     }
 
     public record RefundRow(long id, long paymentId, String refundKey, long amount, String status, String orderNo,

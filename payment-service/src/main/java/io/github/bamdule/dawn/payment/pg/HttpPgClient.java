@@ -6,6 +6,7 @@ import java.time.LocalDate;
 import org.springframework.beans.factory.annotation.Value;
 import org.springframework.http.client.JdkClientHttpRequestFactory;
 import org.springframework.stereotype.Component;
+import org.springframework.web.client.HttpClientErrorException;
 import org.springframework.web.client.HttpServerErrorException;
 import org.springframework.web.client.ResourceAccessException;
 import org.springframework.web.client.RestClient;
@@ -14,6 +15,7 @@ import org.springframework.web.client.RestClient;
 public class HttpPgClient implements PgClient {
 
     private static final Duration CONNECT_TIMEOUT = Duration.ofSeconds(1);
+    private static final int CONFLICT = 409;
 
     private final RestClient restClient;
     private final boolean idempotencySupported;
@@ -39,10 +41,19 @@ public class HttpPgClient implements PgClient {
                     .body(new ApproveRequest(amount, method))
                     .retrieve()
                     .body(ApproveResponse.class);
+            if (approveResponse == null) {
+                return PgApproveResult.unknown(UNKNOWN_EMPTY_RESPONSE);
+            }
             if ("APPROVED".equals(approveResponse.status())) {
                 return PgApproveResult.approved();
             }
             return PgApproveResult.declined(approveResponse.declineCode());
+        } catch (HttpClientErrorException clientErrorException) {
+            // 409 는 같은 키의 요청이 처리 중이라는 뜻이라 모름이다. 그 밖의 4xx 는 요청을 받지 않은 것이라 확실한 거절이다
+            if (clientErrorException.getStatusCode().value() == CONFLICT) {
+                return PgApproveResult.unknown(UNKNOWN_IN_PROGRESS);
+            }
+            return PgApproveResult.declined(REJECTED_BY_PG + clientErrorException.getStatusCode().value());
         } catch (HttpServerErrorException serverErrorException) {
             return PgApproveResult.unknown(UNKNOWN_SERVER_ERROR);
         } catch (ResourceAccessException resourceAccessException) {
@@ -50,21 +61,35 @@ public class HttpPgClient implements PgClient {
         }
     }
 
+    // 404 는 요청 없음, 그 밖의 4xx 와 빈 응답은 모름이다. 모름은 10분이 지나면 사람이 확정한다
     @Override
     public String inquire(String idempotencyKey) {
-        return restClient.get().uri("/pg/payments/{key}", idempotencyKey).retrieve().body(InquiryResponse.class).status();
+        try {
+            InquiryResponse inquiryResponse = restClient.get().uri("/pg/payments/{key}", idempotencyKey).retrieve()
+                    .body(InquiryResponse.class);
+            return inquiryResponse == null || inquiryResponse.status() == null ? INQUIRY_UNKNOWN : inquiryResponse.status();
+        } catch (HttpClientErrorException.NotFound notFound) {
+            return INQUIRY_NOT_FOUND;
+        } catch (HttpClientErrorException clientErrorException) {
+            return INQUIRY_UNKNOWN;
+        }
     }
 
     @Override
     public String refund(String refundKey, String paymentKey, long amount) {
         try {
-            String status = restClient.post()
+            RefundResponse refundResponse = restClient.post()
                     .uri("/pg/refunds")
                     .body(new RefundRequest(refundKey, paymentKey, amount))
                     .retrieve()
-                    .body(RefundResponse.class)
-                    .status();
-            return "COMPLETED".equals(status) ? "COMPLETED" : "DECLINED";
+                    .body(RefundResponse.class);
+            if (refundResponse == null || refundResponse.status() == null) {
+                return "UNKNOWN";
+            }
+            return "COMPLETED".equals(refundResponse.status()) ? "COMPLETED" : "DECLINED";
+        } catch (HttpClientErrorException clientErrorException) {
+            // 대행사가 이 환불을 받아들이지 않았다(거래 없음 등). 다시 보내도 같으므로 실패로 남기고 사람이 확정한다
+            return "DECLINED";
         } catch (HttpServerErrorException | ResourceAccessException exception) {
             return "UNKNOWN";
         }

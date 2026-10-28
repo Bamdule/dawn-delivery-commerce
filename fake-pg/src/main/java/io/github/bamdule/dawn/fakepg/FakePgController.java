@@ -69,11 +69,19 @@ public class FakePgController {
         };
     }
 
+    // ERROR 는 500, EMPTY 는 본문 없는 200 으로 답한다. 조회가 실패하는 동안 배치가 어떻게 버티는지 보려고 둔다
     @GetMapping("/pg/payments/{idempotencyKey}")
-    public InquiryResponse inquire(@PathVariable String idempotencyKey) {
-        return fakePgStore.payment(idempotencyKey)
+    public ResponseEntity<InquiryResponse> inquire(@PathVariable String idempotencyKey) {
+        String behavior = fakePgStore.nextInquiryBehavior();
+        if (behavior.equals("ERROR")) {
+            return ResponseEntity.status(HttpStatus.INTERNAL_SERVER_ERROR).build();
+        }
+        if (behavior.equals("EMPTY")) {
+            return ResponseEntity.ok().build();
+        }
+        return ResponseEntity.ok(fakePgStore.payment(idempotencyKey)
                 .map(payment -> new InquiryResponse(payment.status()))
-                .orElse(new InquiryResponse("NOT_FOUND"));
+                .orElse(new InquiryResponse("NOT_FOUND")));
     }
 
     @PostMapping("/pg/refunds")
@@ -104,6 +112,11 @@ public class FakePgController {
     @PostMapping("/fake/behaviors/refund")
     public void enqueueRefund(@RequestParam String behavior) {
         fakePgStore.enqueueRefund(behavior);
+    }
+
+    @PostMapping("/fake/behaviors/inquiry")
+    public void enqueueInquiry(@RequestParam String behavior) {
+        fakePgStore.enqueueInquiry(behavior);
     }
 
     @PostMapping("/fake/idempotency")

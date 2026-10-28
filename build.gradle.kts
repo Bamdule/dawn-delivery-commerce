@@ -54,6 +54,58 @@ subprojects {
         }
     }
 
+    // API 문서 테스트(REST Docs)가 만든 Markdown 스니펫을 docs/api/{모듈}.md 하나로 합친다.
+    // 스니펫 폴더 이름의 앞 번호가 문서 순서이고, 번호 뒤가 절 제목이다. 예시 값이 실행마다 달라 저장소 문서와 비교하지 않는다.
+    // 계약이 바뀐 것은 REST Docs 가 잡는다. 문서에 없는 응답 필드가 생기거나 문서의 필드가 사라지면 문서 테스트가 깨진다
+    val apiDocsModule = project.name
+    val snippetDirectory = layout.buildDirectory.dir("generated-snippets")
+    val apiDocsFile = rootProject.layout.projectDirectory.file("docs/api/$apiDocsModule.md")
+    // 스니펫은 테스트의 산출물이다. 지워졌으면 테스트를 다시 돌려 만든다
+    tasks.named<Test>("test") {
+        outputs.dir(snippetDirectory)
+    }
+
+    tasks.register("apiDocs") {
+        description = "API 문서 테스트의 스니펫을 docs/api 로 합친다"
+        group = "documentation"
+        dependsOn("test")
+        onlyIf { snippetDirectory.get().asFile.isDirectory }
+        doLast {
+            val parts = listOf(
+                "description" to null,
+                "http-request" to "요청",
+                "path-parameters" to null,
+                "query-parameters" to null,
+                "request-fields" to null,
+                "http-response" to "응답",
+                "response-fields" to null,
+            )
+            val sections = snippetDirectory.get().asFile.listFiles { file -> file.isDirectory }.orEmpty().sortedBy { it.name }
+            val text = buildString {
+                appendLine("# $apiDocsModule API")
+                appendLine()
+                appendLine("컨트롤러 테스트가 만든 문서입니다. 직접 고치지 말고 `./gradlew :$apiDocsModule:apiDocs` 로 다시 만듭니다.")
+                sections.forEach { section ->
+                    appendLine()
+                    appendLine("## " + section.name.substringAfter('-'))
+                    parts.forEach { (name, heading) ->
+                        val snippet = section.resolve("$name.md")
+                        if (snippet.isFile) {
+                            appendLine()
+                            if (heading != null) {
+                                appendLine("**$heading**")
+                                appendLine()
+                            }
+                            appendLine(snippet.readText().trim())
+                        }
+                    }
+                }
+            }
+            apiDocsFile.asFile.parentFile.mkdirs()
+            apiDocsFile.asFile.writeText(text)
+        }
+    }
+
     val testSourceSet = the<SourceSetContainer>()["test"]
     tasks.register<Test>("experiment") {
         description = "설계 가정을 재는 실험을 돌린다"

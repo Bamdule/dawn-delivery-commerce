@@ -18,4 +18,7 @@ dependencies {
     testFixturesApi("org.testcontainers:testcontainers-junit-jupiter")
     testFixturesApi("org.testcontainers:testcontainers-mysql")
     testFixturesApi("org.testcontainers:testcontainers-kafka")
+    // 서비스의 API 문서 테스트가 함께 쓰는 형식과 템플릿 (docs/api)
+    testFixturesApi("org.springframework.boot:spring-boot-starter-restdocs")
+    testFixturesApi("org.springframework.restdocs:spring-restdocs-mockmvc")
 }

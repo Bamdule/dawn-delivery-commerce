@@ -37,6 +37,7 @@ public class TargetCorrections {
             if (!shipmentTargetRepository.exists(orderNo)) {
                 return shipmentTargetRepository.insertWaiting(toTarget(orderDetail));
             }
+            shipmentTargetRepository.lockTarget(orderNo);
             boolean untouched = jdbcClient.sql("""
                     SELECT COUNT(*) FROM shipment_target_line
                      WHERE order_no = :orderNo AND (shipped_qty > 0 OR unfilled_qty > 0 OR exception_qty > 0)
@@ -44,9 +45,18 @@ public class TargetCorrections {
             if (!untouched) {
                 return false;
             }
+            // 취소 표시를 지운 때만 품목을 지운다. 이미 대기 중인 대상을 다시 보정하면 아무것도 바꾸지 않고 409 다
+            int removedMark = jdbcClient.sql("DELETE FROM shipment_target WHERE order_no = :orderNo AND status = 'CANCELLED'")
+                    .param("orderNo", orderNo).update();
+            if (removedMark == 0) {
+                return false;
+            }
             jdbcClient.sql("DELETE FROM shipment_target_line WHERE order_no = :orderNo").param("orderNo", orderNo).update();
-            jdbcClient.sql("DELETE FROM shipment_target WHERE order_no = :orderNo AND status = 'CANCELLED'").param("orderNo", orderNo).update();
-            return shipmentTargetRepository.insertWaiting(toTarget(orderDetail));
+            if (!shipmentTargetRepository.insertWaiting(toTarget(orderDetail))) {
+                status.setRollbackOnly();
+                return false;
+            }
+            return true;
         }));
     }
 

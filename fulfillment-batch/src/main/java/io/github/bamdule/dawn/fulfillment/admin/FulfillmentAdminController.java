@@ -3,6 +3,7 @@ package io.github.bamdule.dawn.fulfillment.admin;
 import io.github.bamdule.dawn.fulfillment.job.ShipmentJobRunner;
 import io.github.bamdule.dawn.fulfillment.run.CutoffRunRepository;
 import io.github.bamdule.dawn.fulfillment.run.CutoffRunStatus;
+import io.github.bamdule.dawn.fulfillment.shipment.ShipmentHandover;
 import io.github.bamdule.dawn.fulfillment.stock.CenterStocks;
 import io.github.bamdule.dawn.fulfillment.target.ShipmentTargetRepository;
 import java.time.LocalDateTime;
@@ -28,10 +29,12 @@ public class FulfillmentAdminController {
     private final CenterStocks centerStocks;
     private final ShipmentJobRunner shipmentJobRunner;
     private final JdbcClient jdbcClient;
+    private final ShipmentHandover shipmentHandover;
 
     public FulfillmentAdminController(ShipmentExceptions shipmentExceptions, TargetCorrections targetCorrections,
                                       ShipmentTargetRepository shipmentTargetRepository, CutoffRunRepository cutoffRunRepository,
-                                      CenterStocks centerStocks, ShipmentJobRunner shipmentJobRunner, JdbcClient jdbcClient) {
+                                      CenterStocks centerStocks, ShipmentJobRunner shipmentJobRunner, JdbcClient jdbcClient,
+                                      ShipmentHandover shipmentHandover) {
         this.shipmentExceptions = shipmentExceptions;
         this.targetCorrections = targetCorrections;
         this.shipmentTargetRepository = shipmentTargetRepository;
@@ -39,6 +42,7 @@ public class FulfillmentAdminController {
         this.centerStocks = centerStocks;
         this.shipmentJobRunner = shipmentJobRunner;
         this.jdbcClient = jdbcClient;
+        this.shipmentHandover = shipmentHandover;
     }
 
     @PostMapping("/admin/shipment-exceptions/{exceptionNo}/defer")
@@ -54,6 +58,15 @@ public class FulfillmentAdminController {
     @PostMapping("/admin/shipment-orders/{shipmentOrderId}/cancel")
     public ResponseEntity<Void> cancelShipmentOrder(@PathVariable long shipmentOrderId) {
         return changed(shipmentExceptions.cancelShipmentOrder(shipmentOrderId));
+    }
+
+    // 배차가 부른다. 검증을 통과한 회차가 아니면 409
+    @PostMapping("/admin/cutoff-runs/{cutoffAt}/hand-over")
+    public ResponseEntity<HandoverResponse> handOver(
+            @PathVariable @DateTimeFormat(iso = DateTimeFormat.ISO.DATE_TIME) LocalDateTime cutoffAt) {
+        return shipmentHandover.handOver(cutoffAt)
+                .map(handedOver -> ResponseEntity.ok(new HandoverResponse(handedOver)))
+                .orElseGet(() -> ResponseEntity.status(409).build());
     }
 
     @PostMapping("/admin/cutoff-runs/{cutoffAt}/approve")
@@ -103,6 +116,9 @@ public class FulfillmentAdminController {
     }
 
     public record StartResponse(String status) {
+    }
+
+    public record HandoverResponse(int handedOver) {
     }
 
     public record TargetDiff(String orderNo, String kind) {

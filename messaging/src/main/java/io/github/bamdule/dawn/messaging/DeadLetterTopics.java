@@ -2,6 +2,7 @@ package io.github.bamdule.dawn.messaging;
 
 import java.time.Duration;
 import java.util.Arrays;
+import java.util.List;
 import org.apache.kafka.clients.admin.NewTopic;
 import org.apache.kafka.common.config.TopicConfig;
 import org.springframework.kafka.config.TopicBuilder;
@@ -19,12 +20,27 @@ public final class DeadLetterTopics {
 
     // 받는 서비스가 자기가 구독하는 토픽의 처리 실패 토픽을 선언한다. 이미 있으면 설정만 맞춘다
     public static KafkaAdmin.NewTopics forSources(String... sourceTopics) {
-        return new KafkaAdmin.NewTopics(Arrays.stream(sourceTopics)
-                .map(sourceTopic -> TopicBuilder.name(sourceTopic + "-dlt")
+        return new Declared(List.of(sourceTopics), Arrays.stream(sourceTopics)
+                .map(sourceTopic -> TopicBuilder.name(sourceTopic + DeadLetterReplayer.DEAD_LETTER_SUFFIX)
                         .partitions(PARTITIONS)
                         .replicas(1)
                         .config(TopicConfig.RETENTION_MS_CONFIG, String.valueOf(RETENTION.toMillis()))
                         .build())
                 .toArray(NewTopic[]::new));
+    }
+
+    // 토픽 선언과 함께 원래 토픽 이름을 들고 있어, 쌓인 수 지표와 다시 넣기 API 가 범위를 알 수 있다
+    static final class Declared extends KafkaAdmin.NewTopics {
+
+        private final List<String> sourceTopics;
+
+        private Declared(List<String> sourceTopics, NewTopic... newTopics) {
+            super(newTopics);
+            this.sourceTopics = sourceTopics;
+        }
+
+        List<String> sourceTopics() {
+            return sourceTopics;
+        }
     }
 }

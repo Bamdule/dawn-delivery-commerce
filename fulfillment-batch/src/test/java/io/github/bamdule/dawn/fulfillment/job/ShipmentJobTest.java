@@ -152,6 +152,8 @@ class ShipmentJobTest extends FulfillmentIntegrationTest {
         assertThat(run(cutoff).getStatus()).isEqualTo(BatchStatus.FAILED);
 
         assertThat(mockMvcTester.post().uri("/admin/shipment-targets/{orderNo}/resync", orderNo)).hasStatus(204);
+        assertThat(mockMvcTester.post().uri("/admin/shipment-targets/{orderNo}/resync", orderNo))
+                .as("두 번 눌러도 대기 중인 대상의 품목을 지우지 않는다").hasStatus(409);
         assertThat(run(cutoff).getStatus()).isEqualTo(BatchStatus.COMPLETED);
 
         assertThat(shippedByCenter(cutoff, orderNo)).isEqualTo(Map.of(SEOUL_A, 1));

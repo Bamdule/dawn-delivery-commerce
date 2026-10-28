@@ -14,6 +14,9 @@ import static org.springframework.restdocs.request.RequestDocumentation.paramete
 import static org.springframework.restdocs.request.RequestDocumentation.pathParameters;
 import static org.springframework.restdocs.request.RequestDocumentation.queryParameters;
 
+import io.github.bamdule.dawn.event.PaymentEvent;
+import io.github.bamdule.dawn.event.PaymentEventType;
+import io.github.bamdule.dawn.event.Topics;
 import io.github.bamdule.dawn.messaging.test.ApiDocs;
 import io.github.bamdule.dawn.order.OrderIntegrationTest;
 import io.github.bamdule.dawn.order.OrderStatus;
@@ -23,6 +26,7 @@ import io.github.bamdule.dawn.order.client.PaymentClient.ApproveResult;
 import io.github.bamdule.dawn.order.client.PaymentClient.RefundAcceptResult;
 import io.github.bamdule.dawn.order.placement.OrderOutcome;
 import io.github.bamdule.dawn.order.refund.RefundSender;
+import java.time.Instant;
 import java.util.Arrays;
 import java.util.UUID;
 import org.junit.jupiter.api.Test;
@@ -33,8 +37,10 @@ import org.springframework.context.annotation.Import;
 import org.springframework.http.MediaType;
 import org.springframework.jdbc.support.GeneratedKeyHolder;
 import org.springframework.jdbc.support.KeyHolder;
+import org.springframework.kafka.core.KafkaTemplate;
 import org.springframework.restdocs.payload.JsonFieldType;
 import org.springframework.test.web.servlet.assertj.MockMvcTester;
+import tools.jackson.databind.json.JsonMapper;
 
 // 주문 서비스의 API 문서. 문서에 없는 응답 필드가 생기면 이 테스트가 깨진다 (docs/api/order-service.md)
 @AutoConfigureMockMvc
@@ -50,6 +56,12 @@ class OrderApiDocumentationTest extends OrderIntegrationTest {
 
     @Autowired
     private RefundSender refundSender;
+
+    @Autowired
+    private KafkaTemplate<String, String> kafkaTemplate;
+
+    @Autowired
+    private JsonMapper jsonMapper;
 
     @Test
     void 주문_생성() {
@@ -197,6 +209,28 @@ class OrderApiDocumentationTest extends OrderIntegrationTest {
                 .apply(document("09-이벤트 격리 (관리)",
                         description("영구히 보낼 수 없는 이벤트를 QUARANTINED 로 둔다. 같은 키의 뒤 이벤트가 풀리므로 순서가 바뀌어도 되는지 판단한 뒤에만 쓴다. PENDING 이 아니면 409"),
                         pathParameters(parameterWithName("seq").description("아웃박스 순번"))));
+    }
+
+    @Test
+    void 처리_실패_토픽_관리() throws Exception {
+        PaymentEvent refunded = new PaymentEvent(UUID.randomUUID(), PaymentEventType.REFUNDED, "20261028-A1B2C3D4E", 1, 45_000,
+                "refund-20261028-A1B2C3D4E-cancel", false, Instant.now());
+        kafkaTemplate.send(Topics.PAYMENT_EVENTS + "-dlt", refunded.orderNo(), jsonMapper.writeValueAsString(refunded)).get();
+
+        assertThat(mockMvcTester.get().uri("/admin/dead-letters"))
+                .hasStatusOk()
+                .apply(document("10-처리 실패 토픽에 쌓인 메시지 (관리)",
+                        description("이 서비스가 받는 토픽마다 아직 다시 넣지 않은 메시지 수. 받는 서비스(주문, 재고, 풀필먼트)마다 같은 주소로 있다"),
+                        responseFields(
+                                fieldWithPath("[].topic").description("원래 토픽. 처리 실패 토픽은 이 이름 뒤에 -dlt 를 붙인다"),
+                                fieldWithPath("[].backlog").description("다시 넣지 않은 메시지 수. 1건이라도 있으면 경보"))));
+        assertThat(mockMvcTester.post().uri("/admin/dead-letters/{topic}/replay?maxRecords=500", Topics.PAYMENT_EVENTS))
+                .hasStatusOk()
+                .apply(document("11-처리 실패 토픽 다시 넣기 (관리)",
+                        description("원인을 고친 뒤 같은 키로 원래 토픽에 다시 넣는다. 그 토픽을 읽는 모든 그룹이 다시 받는다. 이 서비스가 받지 않는 토픽이면 404"),
+                        pathParameters(parameterWithName("topic").description("원래 토픽")),
+                        queryParameters(parameterWithName("maxRecords").description("이번에 다시 넣을 최대 건수. 기본 500")),
+                        responseFields(fieldWithPath("replayed").description("다시 넣은 메시지 수"))));
     }
 
     private static org.springframework.restdocs.payload.FieldDescriptor[] orderResultFields() {

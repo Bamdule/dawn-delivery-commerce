@@ -98,6 +98,23 @@ class FulfillmentApiDocumentationTest extends FulfillmentIntegrationTest {
     }
 
     @Test
+    void 배차_인계() throws Exception {
+        LocalDateTime cutoff = newCutoff();
+        long product = newProductId();
+        stock(SEOUL_A, product, 5);
+        paid(cutoff, cutoff.minusHours(2), "SEOUL", line(product, 1));
+        paid(cutoff, cutoff.minusHours(1), "SEOUL", line(product, 2));
+        run(cutoff);
+
+        assertThat(mockMvcTester.post().uri("/admin/cutoff-runs/{cutoffAt}/hand-over", cutoff.toString()))
+                .hasStatusOk()
+                .apply(document("12-배차 인계",
+                        description("배차가 VERIFIED 회차를 가져가며 부른다. 그 회차의 출고 지시를 HANDED_OVER 로 바꿔, 실사가 피킹 전 수량으로 빼지 않고 출고 지시 취소도 받지 않게 한다. 다시 부르면 0건이다. VERIFIED 가 아니면 409"),
+                        pathParameters(parameterWithName("cutoffAt").description("마감 시각")),
+                        responseFields(fieldWithPath("handedOver").description("이번에 넘긴 출고 지시 수"))));
+    }
+
+    @Test
     void 대상_확정_차이와_출고_대상_보정() throws Exception {
         LocalDateTime cutoff = newCutoff();
         long product = newProductId();

@@ -133,7 +133,7 @@ CREATE TABLE shipment_order (
     cutoff_at  DATETIME(3) NOT NULL,
     order_no   VARCHAR(30) NOT NULL,
     center_id  VARCHAR(20) NOT NULL,
-    status     VARCHAR(20) NOT NULL,   -- CREATED / SHIPPED / CANCELLED (배차 전 관리자 취소. 실물 재고를 되돌리고 출고 예외로)
+    status     VARCHAR(20) NOT NULL,   -- CREATED / HANDED_OVER (배차로 넘김) / CANCELLED (배차 전 관리자 취소. 실물 재고를 되돌리고 출고 예외로)
     created_at DATETIME(3) NOT NULL,
     PRIMARY KEY (id),
     UNIQUE KEY uk_shipment_order (cutoff_at, order_no, center_id)

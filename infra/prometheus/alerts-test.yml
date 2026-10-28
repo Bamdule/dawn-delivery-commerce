@@ -59,3 +59,23 @@ tests:
         exp_alerts:
           - exp_annotations:
               summary: 00:50 까지 SHIPMENT_CREATED 가 아님
+
+  - name: 03:00 까지 배차로 넘기지 않은 출고 지시가 있으면 울리고 넘기면 꺼진다
+    interval: 1m
+    input_series:
+      - series: dawn_fulfillment_run_latest_cutoff_seconds
+        values: "0+0x300"
+      - series: dawn_fulfillment_handover_waiting_orders
+        values: "120+0x250 0+0x50"
+    alert_rule_test:
+      - eval_time: 239m
+        alertname: ShipmentNotHandedOver
+        exp_alerts: []
+      - eval_time: 241m
+        alertname: ShipmentNotHandedOver
+        exp_alerts:
+          - exp_annotations:
+              summary: 03:00 까지 배차로 넘기지 않은 출고 지시가 있음
+      - eval_time: 260m
+        alertname: ShipmentNotHandedOver
+        exp_alerts: []

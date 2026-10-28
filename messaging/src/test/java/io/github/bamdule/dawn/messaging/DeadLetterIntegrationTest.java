@@ -8,10 +8,14 @@ import io.micrometer.core.instrument.MeterRegistry;
 import io.micrometer.core.instrument.simple.SimpleMeterRegistry;
 import java.time.Duration;
 import java.util.ArrayList;
+import java.util.HashMap;
 import java.util.List;
+import java.util.Map;
 import java.util.UUID;
 import org.apache.kafka.clients.consumer.Consumer;
+import org.apache.kafka.clients.consumer.ConsumerConfig;
 import org.apache.kafka.clients.consumer.ConsumerRecord;
+import org.apache.kafka.common.serialization.StringDeserializer;
 import org.junit.jupiter.api.Test;
 import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.boot.test.context.SpringBootTest;
@@ -20,6 +24,7 @@ import org.springframework.context.annotation.Bean;
 import org.springframework.context.annotation.Import;
 import org.springframework.kafka.annotation.KafkaListener;
 import org.springframework.kafka.core.ConsumerFactory;
+import org.springframework.kafka.core.DefaultKafkaConsumerFactory;
 import org.springframework.kafka.core.KafkaTemplate;
 
 @SpringBootTest
@@ -66,19 +71,29 @@ class DeadLetterIntegrationTest {
     void 처리_실패_토픽의_메시지를_같은_키로_원래_토픽에_다시_넣는다() throws Exception {
         String original = "replay-" + UUID.randomUUID();
         kafkaTemplate.send(original + "-dlt", "order-7", "{\"fixed\":true}").get();
+        kafkaTemplate.send(original + "-dlt", "order-8", "{\"fixed\":true}").get();
+        // 서비스 설정처럼 읽기 시작 위치를 정하지 않은 소비자 팩토리로 만든다. Kafka 기본값은 최신 위치다
+        Map<String, Object> serviceDefaults = new HashMap<>(consumerFactory.getConfigurationProperties());
+        serviceDefaults.remove(ConsumerConfig.AUTO_OFFSET_RESET_CONFIG);
+        DeadLetterReplayer replayer = new DeadLetterReplayer(
+                new DefaultKafkaConsumerFactory<>(serviceDefaults, new StringDeserializer(), new StringDeserializer()), kafkaTemplate);
+        assertThat(replayer.backlog(original)).isEqualTo(2);
 
-        int replayed = deadLetterReplayer.replay(original, 100);
+        assertThat(replayer.replay(original, 1)).as("한 번에 다시 넣는 수를 넘지 않는다").isEqualTo(1);
+        assertThat(replayer.backlog(original)).as("다시 넣을 때까지 쌓인 수가 줄지 않는다").isEqualTo(1);
+        int replayed = replayer.replay(original, 100);
 
         assertThat(replayed).isEqualTo(1);
+        assertThat(replayer.backlog(original)).isZero();
         List<ConsumerRecord<String, String>> records = new ArrayList<>();
         try (Consumer<String, String> consumer = consumerFactory.createConsumer("verify-" + UUID.randomUUID(), null)) {
             consumer.subscribe(List.of(original));
             long deadline = System.currentTimeMillis() + 20_000;
-            while (records.isEmpty() && System.currentTimeMillis() < deadline) {
+            while (records.size() < 2 && System.currentTimeMillis() < deadline) {
                 consumer.poll(Duration.ofMillis(500)).forEach(records::add);
             }
         }
-        assertThat(records).extracting(ConsumerRecord::key).containsExactly("order-7");
+        assertThat(records).extracting(ConsumerRecord::key).containsExactlyInAnyOrder("order-7", "order-8");
         assertThat(deadLetterReplayer.replay(original, 100)).as("이미 다시 넣은 메시지는 또 넣지 않는다").isZero();
     }
 

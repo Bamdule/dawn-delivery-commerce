@@ -16,6 +16,7 @@ import org.springframework.boot.kafka.autoconfigure.DefaultKafkaProducerFactoryC
 import org.springframework.context.annotation.Bean;
 import org.springframework.jdbc.core.simple.JdbcClient;
 import org.springframework.kafka.core.ConsumerFactory;
+import org.springframework.kafka.core.KafkaAdmin;
 import org.springframework.kafka.core.KafkaTemplate;
 import org.springframework.kafka.listener.DefaultErrorHandler;
 import org.springframework.scheduling.annotation.EnableScheduling;
@@ -104,6 +105,26 @@ public class MessagingAutoConfiguration {
         return new DeadLetterReplayer(consumerFactory, kafkaTemplate);
     }
 
+    // 서비스가 선언한 처리 실패 토픽에서 원래 토픽 이름을 거둔다
+    @Bean
+    @ConditionalOnMissingBean
+    public DeadLetterSources deadLetterSources(ObjectProvider<KafkaAdmin.NewTopics> declaredTopics) {
+        List<String> originalTopics = declaredTopics.orderedStream()
+                .filter(DeadLetterTopics.Declared.class::isInstance)
+                .flatMap(newTopics -> ((DeadLetterTopics.Declared) newTopics).sourceTopics().stream())
+                .distinct()
+                .toList();
+        return new DeadLetterSources(originalTopics);
+    }
+
+    @Bean
+    @ConditionalOnWebApplication(type = ConditionalOnWebApplication.Type.SERVLET)
+    @ConditionalOnBean(DeadLetterReplayer.class)
+    public DeadLetterAdminController deadLetterAdminController(DeadLetterReplayer deadLetterReplayer,
+                                                               DeadLetterSources deadLetterSources) {
+        return new DeadLetterAdminController(deadLetterReplayer, deadLetterSources);
+    }
+
     @Bean
     @ConditionalOnMissingBean
     @ConditionalOnBean(KafkaTemplate.class)
@@ -139,5 +160,20 @@ public class MessagingAutoConfiguration {
     @ConditionalOnProperty(prefix = "dawn.outbox", name = "enabled", havingValue = "true", matchIfMissing = true)
     public OutboxAdminController outboxAdminController(OutboxMaintenance outboxMaintenance, OutboxProperties outboxProperties) {
         return new OutboxAdminController(outboxMaintenance, outboxProperties);
+    }
+
+    // 늘어난 수가 아니라 쌓여 있는 수를 낸다. 다시 넣을 때까지 경보가 꺼지지 않는다 (infra/prometheus/alerts.yml)
+    @Bean
+    @ConditionalOnBean({DbGauges.class, DeadLetterReplayer.class})
+    public SmartInitializingSingleton deadLetterBacklogMetric(DbGauges dbGauges, DeadLetterReplayer deadLetterReplayer,
+                                                              DeadLetterSources deadLetterSources) {
+        return () -> {
+            if (deadLetterSources.originalTopics().isEmpty()) {
+                return;
+            }
+            dbGauges.register(ConsumerErrorHandling.DEAD_LETTER_METRIC + ".backlog",
+                    "다시 넣지 않은 처리 실패 토픽의 메시지. 1건이라도 있으면 경보", "messages",
+                    () -> deadLetterSources.originalTopics().stream().mapToLong(deadLetterReplayer::backlog).sum());
+        };
     }
 }

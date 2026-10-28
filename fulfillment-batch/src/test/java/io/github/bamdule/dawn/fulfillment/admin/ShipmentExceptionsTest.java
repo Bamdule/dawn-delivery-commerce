@@ -111,6 +111,28 @@ class ShipmentExceptionsTest extends FulfillmentIntegrationTest {
     }
 
     @Test
+    void 검증을_통과한_회차만_배차로_넘기고_넘긴_출고_지시는_취소하지_못한다() throws Exception {
+        LocalDateTime cutoff = newCutoff();
+        long product = newProductId();
+        stock(SEOUL_A, product, 3);
+        String orderNo = paid(cutoff, cutoff.minusHours(1), "SEOUL", line(product, 2));
+        assertThat(mockMvcTester.post().uri("/admin/cutoff-runs/{cutoffAt}/hand-over", cutoff.toString()))
+                .as("아직 돌지 않은 회차").hasStatus(409);
+        run(cutoff);
+        long shipmentOrderId = jdbcClient.sql("SELECT id FROM shipment_order WHERE cutoff_at = :cutoffAt AND order_no = :orderNo")
+                .param("cutoffAt", cutoff).param("orderNo", orderNo).query(Long.class).single();
+
+        assertThat(mockMvcTester.post().uri("/admin/cutoff-runs/{cutoffAt}/hand-over", cutoff.toString()))
+                .hasStatusOk().bodyJson().extractingPath("$.handedOver").isEqualTo(1);
+        assertThat(mockMvcTester.post().uri("/admin/cutoff-runs/{cutoffAt}/hand-over", cutoff.toString()))
+                .hasStatusOk().bodyJson().extractingPath("$.handedOver").isEqualTo(0);
+
+        assertThat(mockMvcTester.post().uri("/admin/shipment-orders/{id}/cancel", shipmentOrderId))
+                .as("배차가 가져간 뒤에는 반품으로 다룬다").hasStatus(409);
+        assertThat(stockOf(SEOUL_A, product)).isEqualTo(1);
+    }
+
+    @Test
     void 출고_지시_스텝을_다시_돌려도_출고_지시와_재고_차감이_두_번_일어나지_않는다() throws Exception {
         LocalDateTime cutoff = newCutoff();
         long product = newProductId();

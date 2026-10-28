@@ -16,10 +16,11 @@ groups:
         for: 1m
         annotations:
           summary: 받는 쪽이 피크를 못 따라감
+      # 늘어난 수가 아니라 쌓인 수를 본다. 다시 넣을 때까지 꺼지지 않는다
       - alert: DeadLetterArrived
-        expr: increase(dawn_consumer_dead_letter_total[5m]) > 0
+        expr: dawn_consumer_dead_letter_backlog_messages > 0
         annotations:
-          summary: 처리 실패 토픽에 메시지가 쌓임. 코드나 데이터 문제라 사람이 봐야 함
+          summary: 처리 실패 토픽에 다시 넣지 않은 메시지가 있음. 원인을 고친 뒤 /admin/dead-letters 로 다시 넣음
 
   - name: payment
     rules:
@@ -109,6 +110,11 @@ groups:
         expr: dawn_fulfillment_exception_open_exceptions > 0
         annotations:
           summary: 사람이 이월하거나 관리자 취소해야 하는 출고 예외
+      # 배차는 02:00 이다. 03:00 까지 넘기지 않은 출고 지시가 있으면 실사가 나간 물건을 피킹 전으로 센다
+      - alert: ShipmentNotHandedOver
+        expr: (time() - dawn_fulfillment_run_latest_cutoff_seconds > 14400) and (time() - dawn_fulfillment_run_latest_cutoff_seconds < 86400) and dawn_fulfillment_handover_waiting_orders > 0
+        annotations:
+          summary: 03:00 까지 배차로 넘기지 않은 출고 지시가 있음
       - alert: CarryoverOverdue
         expr: dawn_fulfillment_carryover_overdue_items > 0
         annotations:

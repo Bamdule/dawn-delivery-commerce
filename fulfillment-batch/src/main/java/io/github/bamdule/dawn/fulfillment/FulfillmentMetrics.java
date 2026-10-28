@@ -34,6 +34,9 @@ public class FulfillmentMetrics {
                          WHERE t.status = 'WAITING' AND l.waiting_qty > 0
                            AND l.assigned_cutoff_at < (SELECT MAX(cutoff_at) FROM cutoff_run WHERE status IN ('VERIFIED', 'VERIFY_FAILED'))
                         """).query(Long.class).single());
+        // 02:00 배차가 VERIFIED 회차를 가져가지 않으면 실사가 이미 나간 물건을 피킹 전으로 센다
+        dbGauges.register("dawn.fulfillment.handover.waiting", "배차로 넘기지 않은 출고 지시", "orders",
+                () -> count(jdbcClient, "SELECT COUNT(*) FROM shipment_order WHERE status = 'CREATED'"));
         dbGauges.register("dawn.fulfillment.unfilled.ratio", "가장 최근에 검증까지 끝난 회차의 못 채운 수량 비율. 0.5% 넘으면 경보", "ratio",
                 () -> jdbcClient.sql("""
                         SELECT COALESCE((SELECT SUM(d.quantity) FROM unfillable_decision d WHERE d.cutoff_at = r.cutoff_at), 0)

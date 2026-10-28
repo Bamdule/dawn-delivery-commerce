@@ -38,4 +38,27 @@ subprojects {
     tasks.withType<Test> {
         useJUnitPlatform()
     }
+
+    // 설계 가정을 재는 실험은 몇 분씩 걸려 기본 빌드에서 뺀다. ./gradlew experiment 로 따로 돌린다 (docs/experiments)
+    tasks.named<Test>("test") {
+        useJUnitPlatform {
+            excludeTags("experiment")
+        }
+    }
+
+    val testSourceSet = the<SourceSetContainer>()["test"]
+    tasks.register<Test>("experiment") {
+        description = "설계 가정을 재는 실험을 돌린다"
+        group = "verification"
+        testClassesDirs = testSourceSet.output.classesDirs
+        classpath = testSourceSet.runtimeClasspath
+        useJUnitPlatform {
+            includeTags("experiment")
+        }
+        outputs.upToDateWhen { false }
+        maxHeapSize = "2g"
+        testLogging {
+            showStandardStreams = true
+        }
+    }
 }

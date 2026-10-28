@@ -8,4 +8,5 @@ include(
     "payment-service",
     "fake-pg",
     "fulfillment-batch",
+    "system-experiment",
 )

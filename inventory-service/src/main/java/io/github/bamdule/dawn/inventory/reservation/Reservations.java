@@ -5,6 +5,7 @@ import io.github.bamdule.dawn.inventory.stock.RandomSlotMissException;
 import io.github.bamdule.dawn.inventory.stock.StockDeduction;
 import io.github.bamdule.dawn.inventory.stock.StockLine;
 import java.time.LocalDateTime;
+import java.util.HashMap;
 import java.util.List;
 import io.github.bamdule.dawn.inventory.stock.SlotAllocation;
 import java.util.Map;
@@ -59,14 +60,18 @@ public class Reservations {
                 throw new OutOfStockException(stockLine.productId());
             }
         }
-        Map<Long, List<SlotAllocation>> allocations = stockDeduction.deduct(reservationCommand.lines(), orderedSlotsOnly);
+        // 예약 행을 먼저 넣고 차감을 맨 끝에 둔다. 몰리는 재고 행의 잠금은 차감부터 커밋까지 쥐므로,
+        // 차감 뒤에 조회와 삽입을 하면 그만큼 잠금이 길어진다. 순서를 바꾸자 단일 상품 예약이 초당 약 500건에서 늘었다
+        // (docs/experiments/01-재고-동시성.md). 슬롯 내역만은 차감 결과라 뒤에 남는다. 슬롯은 여럿이라 덜 몰린다
         LocalDateTime expiresAt = expiresAtFor(reservationCommand.lines());
+        Map<Long, String> reservationIds = new HashMap<>();
         for (StockLine stockLine : reservationCommand.lines()) {
-            String reservationId = reservationRepository.insertHeld(reservationCommand.orderNo(), stockLine.productId(),
-                    stockLine.quantity(), expiresAt);
-            allocations.getOrDefault(stockLine.productId(), List.of())
-                    .forEach(slotAllocation -> reservationRepository.insertSlotAllocation(reservationId, slotAllocation));
+            reservationIds.put(stockLine.productId(), reservationRepository.insertHeld(reservationCommand.orderNo(),
+                    stockLine.productId(), stockLine.quantity(), expiresAt));
         }
+        Map<Long, List<SlotAllocation>> allocations = stockDeduction.deduct(reservationCommand.lines(), orderedSlotsOnly);
+        allocations.forEach((productId, slotAllocations) -> slotAllocations
+                .forEach(slotAllocation -> reservationRepository.insertSlotAllocation(reservationIds.get(productId), slotAllocation)));
         return expiresAt;
     }
 
